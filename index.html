@@ -523,6 +523,7 @@
               <button onclick="setPracticeFilter('error_bank')" id="pFilter-error_bank" data-label="❌ Câu sai">❌ Câu sai <span class="ml-auto px-1.5 rounded-full bg-rose-100 text-rose-700" id="cntFilterWrong">0</span></button>
               <button onclick="setPracticeFilter('sequential')" id="pFilter-sequential" data-label="📋 Tuần tự">📋 Tuần tự</button>
               <button onclick="setPracticeFilter('starred')" id="pFilter-starred" data-label="⭐ Đánh dấu">⭐ Đánh dấu</button>
+              <button onclick="setPracticeFilter('cram')" id="pFilter-cram" data-label="🔥 Ôn cấp tốc">🔥 Ôn cấp tốc (Sao + Sai)</button>
             </div>
           </div>
 
@@ -545,8 +546,8 @@
               <button onclick="toggleKahootPracticeMode()" id="btnKahootMode">⚡ Kahoot: TẮT</button>
               <button onclick="toggleShufflePracticeOptions()" id="btnShufflePractice">🔀 Trộn ABCD: TẮT</button>
               <div class="hidden sm:block pt-2 mt-1 border-t border-slate-200 text-[11px] text-slate-500 leading-relaxed">
-                ⌨️ <b>A–D</b> hoặc <b>1–4</b>: chọn đáp án<br>
-                <b>Enter / →</b>: câu tiếp · <b>←</b>: câu trước<br>
+                ⌨️ <b>A–D / 1–4</b>: chọn đáp án · <b>Space / →</b>: câu tiếp<br>
+                <b>←</b>: câu trước · <b>S</b>: gắn sao · <b>N</b>: ghi chú<br>
                 <b>Esc</b>: đóng hộp thoại / thoát Tập trung
               </div>
             </div>
@@ -690,6 +691,18 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Nhắc nhở phím tắt trên máy tính -->
+      <div id="desktopShortcutHint" class="hidden sm:flex flex-wrap items-center justify-center gap-2 text-[11px] font-medium text-slate-500 pt-0.5 select-none">
+        <span>💻 Phím tắt:</span>
+        <span><kbd class="px-1.5 py-0.5 rounded bg-white border border-slate-300 text-slate-700 font-bold text-[10px]">A–D</kbd> / <kbd class="px-1.5 py-0.5 rounded bg-white border border-slate-300 text-slate-700 font-bold text-[10px]">1–4</kbd> chọn đáp án</span>
+        <span>•</span>
+        <span><kbd class="px-1.5 py-0.5 rounded bg-white border border-slate-300 text-slate-700 font-bold text-[10px]">Space</kbd> sang câu mới</span>
+        <span>•</span>
+        <span><kbd class="px-1.5 py-0.5 rounded bg-white border border-slate-300 text-slate-700 font-bold text-[10px]">S</kbd> gắn sao</span>
+        <span>•</span>
+        <span><kbd class="px-1.5 py-0.5 rounded bg-white border border-slate-300 text-slate-700 font-bold text-[10px]">N</kbd> ghi chú</span>
       </div>
 
       <!-- Thông báo khi bộ lọc rỗng -->
@@ -1294,6 +1307,11 @@
             <textarea id="qFormQuestion" rows="2" class="w-full p-2.5 rounded-xl border border-slate-300 font-medium focus:border-indigo-500 focus:outline-none"></textarea>
           </div>
 
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Ảnh minh họa (tùy chọn — đường dẫn hoặc URL):</label>
+            <input id="qFormImage" type="text" placeholder="Ví dụ: images/trr_c73.png hoặc https://..." class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
+          </div>
+
           <!-- Khối nhập phương án trắc nghiệm Quiz -->
           <div id="qFormQuizFields" class="space-y-2.5">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -1382,6 +1400,7 @@
             <button onclick="syncQuestionsFromUrl(false)" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold">🔄 Đồng bộ ngay</button>
             <button onclick="exportQuestionsOnlyJSON()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">📤 Xuất de.json (người ra đề)</button>
           </div>
+          <div id="syncMetaInfo" class="text-[11px] font-semibold text-indigo-800/80"></div>
           <div id="syncResultBox" class="hidden font-bold"></div>
         </div>
 
@@ -1578,6 +1597,10 @@
       <button onclick="mpClose()" class="px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-bold">✕ Thoát</button>
     </div>
     <div id="mpBody" class="max-w-xl mx-auto p-4 space-y-4"></div>
+  </div>
+  <!-- Modal phóng to hình ảnh đồ thị / ma trận -->
+  <div id="imageZoomModal" onclick="this.classList.add('hidden')" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-xs z-50 flex items-center justify-center p-4 cursor-zoom-out">
+    <img id="imageZoomTarget" src="" alt="Phóng to hình ảnh" class="max-w-full max-h-[90vh] rounded-2xl bg-white p-2 shadow-2xl object-contain">
   </div>
   <div id="toastNotification" class="hidden fixed bottom-16 md:bottom-5 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-lg z-50 whitespace-nowrap"></div>
 
@@ -1800,6 +1823,13 @@
       el._t = setTimeout(() => el.classList.add('hidden'), 2800);
     }
 
+    function openImageZoomModal(src) {
+      if (!src) return;
+      const img = document.getElementById('imageZoomTarget');
+      const modal = document.getElementById('imageZoomModal');
+      if (img && modal) { img.src = src; modal.classList.remove('hidden'); }
+    }
+
     function detectTopic(qText) {
       const t = (qText || '').toLowerCase();
       if (/ip|subnet|mask|192\.|172\.|10\.|127\.|ipv4|ipv6|broadcast|network address|host/.test(t)) return 'Địa chỉ IP & Subnet';
@@ -1903,6 +1933,7 @@
           theoryAnswer: q.theoryAnswer || '',
           topic: q.topic || detectTopic(q.question),
           explanation: q.explanation || '',
+          image: q.image || '',
           starred: !!q.starred,
           note: q.note || ''
         }));
@@ -2578,7 +2609,7 @@
 
     function setPracticeFilter(flt) {
       practiceFilter = flt;
-      ['srs_due', 'interleaved', 'error_bank', 'sequential', 'starred'].forEach(k => {
+      ['srs_due', 'interleaved', 'error_bank', 'sequential', 'starred', 'cram'].forEach(k => {
         const el = document.getElementById(`pFilter-${k}`);
         if (el) {
           el.classList.toggle('is-active', k === flt);
@@ -2713,6 +2744,10 @@
         if (practiceFilter === 'srs_due') list = list.filter(q => isQuestionDueToday(q.id));
         else if (practiceFilter === 'error_bank') list = list.filter(q => isQuestionNeedsErrorRemediation(q.id));
         else if (practiceFilter === 'starred') list = list.filter(q => q.starred);
+        else if (practiceFilter === 'cram') {
+          const priority = list.filter(q => q.starred || (getQProgress(q.id).wrongCount || 0) > 0);
+          list = priority.length ? priority : shuf(list).slice(0, 30);
+        }
 
         if (practiceFilter !== 'sequential') {
           if (settings.priorityOrder === 'random') list = shuf(list);
@@ -2795,6 +2830,17 @@
       document.getElementById('practiceSubjectOriginTag').textContent = `📘 ${sub.name}`;
       document.getElementById('practiceTopicTag').textContent = q.topic || detectTopic(q.question);
       document.getElementById('practiceQuestionText').textContent = q.question;
+      let pImgWrap = document.getElementById('practiceQuestionImgWrap');
+      if (!pImgWrap) {
+        pImgWrap = document.createElement('div');
+        pImgWrap.id = 'practiceQuestionImgWrap';
+        pImgWrap.className = 'hidden text-center space-y-1';
+        pImgWrap.innerHTML = '<img id="practiceQuestionImg" onclick="openImageZoomModal(this.src)" title="Bấm để phóng to" class="max-h-72 sm:max-h-80 w-auto max-w-full mx-auto rounded-xl border border-slate-200 bg-white p-1.5 object-contain cursor-zoom-in shadow-2xs"><div class="text-[10px] text-slate-400">🔍 Bấm vào hình để phóng to</div>';
+        document.getElementById('practiceQuestionText').after(pImgWrap);
+      }
+      const pImg = document.getElementById('practiceQuestionImg');
+      if (q.image) { pImg.src = q.image; pImgWrap.classList.remove('hidden'); }
+      else { pImgWrap.classList.add('hidden'); pImg.removeAttribute('src'); }
       document.getElementById('btnPracticeStar').textContent = q.starred ? '⭐' : '☆';
 
       const errTag = document.getElementById('practiceErrorHistoryTag');
@@ -3465,7 +3511,8 @@ Lời giải : Hub hoạt động ở tầng Vật lý (Layer 1), phát quảng 
       }
       document.getElementById('fcCounter').textContent = `${fcIndex + 1} / ${fcDeck.length}`;
       document.getElementById('fcProgressBar').style.width = `${((fcIndex + 1) / fcDeck.length) * 100}%`;
-      document.getElementById('fcFrontText').textContent = q.question;
+      const fcFrontEl = document.getElementById('fcFrontText');
+      fcFrontEl.innerHTML = escapeHTML(q.question) + (q.image ? `<img src="${escapeHTML(q.image)}" onclick="event.stopPropagation();openImageZoomModal(this.src)" class="mt-3 max-h-40 w-auto max-w-full mx-auto rounded-xl border border-slate-200 bg-white p-1 object-contain cursor-zoom-in">` : '');
       document.getElementById('fcStarIndicator').textContent = q.starred ? '⭐' : '☆';
       document.getElementById('btnFcStar').textContent = q.starred ? '⭐ Đã đánh dấu' : '☆ Đánh dấu khó';
 
@@ -3697,6 +3744,7 @@ Lời giải : Hub hoạt động ở tầng Vật lý (Layer 1), phát quảng 
           topic: q.topic || detectTopic(q.question),
           srsLevelSnapshot: getQProgress(q.id).srsLevel || 0,
           question: q.question,
+          image: q.image || '',
           options: mappedOpts,
           answer: mappedAns,
           explanation: q.explanation || ''
@@ -3929,6 +3977,7 @@ Lời giải : Hub hoạt động ở tầng Vật lý (Layer 1), phát quảng 
               🚩 ${isFlag ? 'Đã đánh dấu' : 'Xem lại'}
             </button>
           </div>
+          ${q.image ? `<div class="text-center"><img src="${escapeHTML(q.image)}" onclick="openImageZoomModal(this.src)" title="Bấm để phóng to" class="max-h-72 w-auto max-w-full mx-auto rounded-xl border border-slate-200 bg-white p-1.5 object-contain cursor-zoom-in"></div>` : ''}
           <div class="space-y-2">${optsHTML}</div>
           ${expBlock}
         `;
@@ -4581,6 +4630,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
               <button onclick="requestRemoveBankQuestion('${sub.id}', '${q.id}')" class="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs">🗑️ Xóa</button>
             </div>
           </div>
+          ${q.image ? `<div class="pt-1"><img src="${escapeHTML(q.image)}" onclick="openImageZoomModal(this.src)" class="max-h-40 w-auto rounded-xl border border-slate-200 bg-white p-1 object-contain cursor-zoom-in"></div>` : ''}
           ${bodyHTML}
           ${q.note ? `<div class="bg-indigo-50/70 text-indigo-950 px-3 py-1.5 rounded-lg text-xs">✍️ <b>Ghi chú riêng:</b> ${escapeHTML(q.note)}</div>` : ''}
           <div class="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
@@ -4610,6 +4660,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
         document.getElementById('qFormId').value = '';
         document.getElementById('qFormKind').value = 'quiz';
         document.getElementById('qFormQuestion').value = '';
+        if (document.getElementById('qFormImage')) document.getElementById('qFormImage').value = '';
         document.getElementById('qFormOptA').value = '';
         document.getElementById('qFormOptB').value = '';
         document.getElementById('qFormOptC').value = '';
@@ -4626,6 +4677,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
         document.getElementById('qFormId').value = q.id;
         document.getElementById('qFormKind').value = isTheoryQuestion(q) ? 'theory' : 'quiz';
         document.getElementById('qFormQuestion').value = q.question;
+        if (document.getElementById('qFormImage')) document.getElementById('qFormImage').value = q.image || '';
         document.getElementById('qFormOptA').value = (q.options && q.options.A) || '';
         document.getElementById('qFormOptB').value = (q.options && q.options.B) || '';
         document.getElementById('qFormOptC').value = (q.options && q.options.C) || '';
@@ -4650,6 +4702,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
       const qId = document.getElementById('qFormId').value;
       const kind = document.getElementById('qFormKind').value;
       const question = document.getElementById('qFormQuestion').value.trim();
+      const image = (document.getElementById('qFormImage') && document.getElementById('qFormImage').value.trim()) || '';
       const topic = document.getElementById('qFormTopic').value.trim() || detectTopic(question);
       const explanation = document.getElementById('qFormExplanation').value.trim();
       const note = document.getElementById('qFormUserNote').value.trim();
@@ -4695,6 +4748,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
         if (q) {
           q.kind = kind;
           q.question = question;
+          q.image = image;
           q.options = options;
           q.answer = answer;
           q.theoryAnswer = theoryAnswer;
@@ -4706,7 +4760,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
       } else {
         sub.questions.push({
           id: 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-          kind, question, options, answer, theoryAnswer, topic, explanation,
+          kind, question, image, options, answer, theoryAnswer, topic, explanation,
           starred: false, note
         });
         showToast('✅ Đã thêm câu hỏi mới!');
@@ -5011,6 +5065,15 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
       if (mp) { clearInterval(mp.tick); clearTimeout(mp.rt); try { mp.peer && mp.peer.destroy(); } catch (e) {} }
       mp = null;
     }
+    function mpCopyInviteLink() {
+      if (!mp || !mp.pin) return;
+      const link = `${location.origin}${location.pathname}?pin=${mp.pin}`;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(() => showToast('📋 Đã copy link mời! Gửi cho bạn bè để vào phòng ngay.')).catch(() => showToast(link));
+      } else {
+        showToast(link);
+      }
+    }
     function mpOpen() { mpReset(); mp = { phase: 'menu' }; mpEl('mpOverlay').classList.remove('hidden'); mpRender(); }
     function mpClose() { mpReset(); mpEl('mpOverlay').classList.add('hidden'); }
     function mpErr(m) { mpReset(); mp = { phase: 'menu', err: m }; mpRender(); }
@@ -5044,14 +5107,15 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
       } else if (mp.phase === 'connecting') {
         b.innerHTML = `<div class="${card} text-center font-bold text-slate-600">⏳ Đang kết nối…</div>`;
       } else if (mp.phase === 'lobby') {
-        b.innerHTML = `<div class="${card} text-center"><div class="text-xs font-bold text-slate-500">PIN phòng</div><div class="text-5xl font-black tracking-widest text-fuchsia-600">${mp.pin || ''}</div><div class="text-xs text-slate-500">Bạn bè mở link web, bấm 🎮 rồi nhập PIN này</div></div>
+        b.innerHTML = `<div class="${card} text-center"><div class="text-xs font-bold text-slate-500">PIN phòng</div><div class="text-5xl font-black tracking-widest text-fuchsia-600">${mp.pin || ''}</div><div class="text-xs text-slate-500">Bạn bè mở link web, bấm 🎮 rồi nhập PIN này</div>
+          ${mp.pin ? `<button onclick="mpCopyInviteLink()" class="mt-2 px-3.5 py-1.5 rounded-xl bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200 text-xs font-bold">📋 Copy link mời vào phòng</button>` : ''}</div>
           <div class="${card}"><h3 class="font-extrabold text-slate-900">👥 Người chơi (${mp.names.length})</h3><div class="flex flex-wrap gap-2">${mp.names.map(n => `<span class="px-3 py-1 rounded-full bg-fuchsia-100 text-fuchsia-800 text-xs font-bold">${escapeHTML(n)}</span>`).join('')}</div></div>
           ${mp.role === 'host' ? `<button onclick="mpStart()" class="${btn}bg-emerald-600 hover:bg-emerald-500">▶ Bắt đầu (${mp.cfg.n} câu)</button>` : '<div class="text-center text-sm font-bold text-slate-500">Đang chờ chủ phòng bắt đầu…</div>'}`;
       } else if (mp.phase === 'question') {
         const q = mp.q, keys = Object.keys(q.opts);
         b.innerHTML = `<div class="flex justify-between text-xs font-extrabold text-slate-600"><span>Câu ${q.i + 1}/${q.n}</span><span>⏱ <b id="mpSec">${q.sec}</b>s</span></div>
           <div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden"><div id="mpBar" class="h-full bg-fuchsia-500" style="width:100%"></div></div>
-          <div class="${card} text-base font-bold text-slate-900">${escapeHTML(q.text)}</div>
+          <div class="${card} text-base font-bold text-slate-900">${escapeHTML(q.text)}${q.image ? `<img src="${escapeHTML(q.image)}" onclick="openImageZoomModal(this.src)" class="mt-2 max-h-56 w-auto max-w-full mx-auto rounded-xl border border-slate-200 bg-white p-1 object-contain cursor-zoom-in">` : ''}</div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${keys.map((k, i) => `<button ${mp.myAnswer ? 'disabled' : ''} onclick="mpAnswer('${k}')" style="background:${MP_COLORS[i % 4]};opacity:${mp.myAnswer && mp.myAnswer !== k ? 0.4 : 1}" class="min-h-[72px] rounded-2xl text-white font-extrabold text-sm px-4 py-3 text-left shadow-md">${k}. ${escapeHTML(q.opts[k])}</button>`).join('')}</div>
           ${mp.myAnswer ? '<div class="text-center text-xs font-bold text-slate-500">Đã chọn — chờ mọi người…</div>' : ''}`;
       } else if (mp.phase === 'reveal') {
@@ -5083,7 +5147,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
           const opts = {};
           if (d.opts && typeof d.opts === 'object') Object.keys(d.opts).slice(0, 8).forEach(k => { if (/^[A-Z]$/.test(k)) opts[k] = str(d.opts[k], 500); });
           if (Object.keys(opts).length < 2) return null;
-          return { t: 'q', i: num(d.i), n: num(d.n), text: str(d.text, 2000), opts, sec: Math.min(Math.max(num(d.sec) || 20, 5), 120) };
+          return { t: 'q', i: num(d.i), n: num(d.n), text: str(d.text, 2000), image: str(d.image, 300), opts, sec: Math.min(Math.max(num(d.sec) || 20, 5), 120) };
         }
         case 'r': return { t: 'r', correct: /^[A-Z]$/.test(d.correct) ? d.correct : '', board: mpCleanBoard(d.board) };
         case 'end': return { t: 'end', board: mpCleanBoard(d.board) };
@@ -5210,7 +5274,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
       const q = mp.order[mp.qi], built = mpBuildQuestion(q, mp.cfg.shuffle);
       mp.cur = q; mp.curOpts = built.opts; mp.curCorrect = built.correct; mp.answers = {};
       mp.qStart = Date.now();
-      mpSend({ t: 'q', i: mp.qi, n: mp.order.length, text: q.question, opts: built.opts, sec: mp.cfg.sec });
+      mpSend({ t: 'q', i: mp.qi, n: mp.order.length, text: q.question, image: q.image || '', opts: built.opts, sec: mp.cfg.sec });
       mp.rt = setTimeout(mpReveal, mp.cfg.sec * 1000 + 1500);
     }
 
@@ -5244,6 +5308,18 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
 
     /* ĐỒNG BỘ ĐỀ TỪ LINK (de.json) */
     const SYNC_URL_KEY = 'quizmaster_sync_url_v1';
+    function updateSyncMetaUI() {
+      const el = document.getElementById('syncMetaInfo');
+      if (!el) return;
+      try {
+        const ts = localStorage.getItem('quizmaster_de_updated_at');
+        if (ts) {
+          const d = new Date(ts);
+          el.textContent = isNaN(d.getTime()) ? '' : `📅 Phiên bản đề gốc cập nhật: ${d.toLocaleString('vi-VN')}`;
+        }
+      } catch (e) {}
+    }
+
     function normQ(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
 
     async function syncQuestionsFromUrl(silent) {
@@ -5264,7 +5340,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
         const genId = (pre, n) => pre + Date.now() + '_' + Math.random().toString(36).slice(2, 2 + n);
         const usedQ = new Set(), usedS = new Set(bankData.subjects.map(x => x.id));
         bankData.subjects.forEach(x => x.questions.forEach(q => usedQ.add(q.id)));
-        const FIELDS = ['question', 'answer', 'theoryAnswer', 'explanation', 'topic', 'kind'];
+        const FIELDS = ['question', 'image', 'answer', 'theoryAnswer', 'explanation', 'topic', 'kind'];
         subs.forEach(inSub => {
           if (!inSub || !inSub.name || !Array.isArray(inSub.questions)) return;
           // Môn: ưu tiên khớp theo id, sau đó mới theo tên
@@ -5313,7 +5389,11 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
             if (ch) updated++;
           });
         });
-        try { localStorage.setItem(SYNC_URL_KEY, url); } catch (e) {}
+        try {
+          localStorage.setItem(SYNC_URL_KEY, url);
+          if (data.exportedAt) localStorage.setItem('quizmaster_de_updated_at', data.exportedAt);
+          updateSyncMetaUI();
+        } catch (e) {}
         if (added || updated || newSubs || relinked) {
           saveAllStores(); renderSubjectTabs(); updateGlobalStats(); initBankView(); refreshActiveView();
         }
@@ -5543,6 +5623,23 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
           e.preventDefault();
           movePracticeQuestion(-1);
         }
+        if (key === 'S') { e.preventDefault(); toggleStarPracticeQuestion(); }
+        else if (key === 'N' && practiceAnswered) { e.preventDefault(); toggleExplainBackInput(); }
+      } else if (!document.getElementById('view-exam').classList.contains('hidden') && activeExam && !activeExam.submitted && !document.getElementById('examPanel-taking').classList.contains('hidden')) {
+        const key = e.key.toUpperCase();
+        const curQ = activeExam.questions[activeExam.currentIndex];
+        const map = { '1': 'A', '2': 'B', '3': 'C', '4': 'D', 'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D' };
+        if (curQ && map[key] && curQ.options && curQ.options[map[key]]) {
+          e.preventDefault();
+          chooseExamOption(curQ.id, map[key]);
+        } else if (e.key === 'ArrowRight' || e.code === 'Space') {
+          if (takingLayout === 'single') { e.preventDefault(); moveTakingQuestion(1); }
+        } else if (e.key === 'ArrowLeft') {
+          if (takingLayout === 'single') { e.preventDefault(); moveTakingQuestion(-1); }
+        } else if (key === 'F' && curQ) {
+          e.preventDefault();
+          toggleExamQuestionFlag(curQ.id);
+        }
       } else if (!document.getElementById('view-flashcard').classList.contains('hidden')) {
         if (e.code === 'Space') { e.preventDefault(); flipFlashcard(); }
         else if (e.code === 'ArrowRight') moveFlashcard(1);
@@ -5565,6 +5662,20 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
       syncQuestionsFromUrl(true);
       const su = document.getElementById('syncUrlInput');
       try { if (su) su.value = localStorage.getItem(SYNC_URL_KEY) || 'de.json'; } catch (e) {}
+      updateSyncMetaUI();
+      try {
+        const urlPin = new URLSearchParams(location.search).get('pin');
+        if (urlPin && /^\d{5}$/.test(urlPin)) {
+          mpOpen();
+          setTimeout(() => {
+            const pInp = document.getElementById('mpPin');
+            const nInp = document.getElementById('mpName');
+            if (pInp) pInp.value = urlPin;
+            if (nInp) nInp.focus();
+            showToast('🎮 Đã điền sẵn mã PIN ' + urlPin + ' — nhập tên rồi bấm Vào phòng!');
+          }, 120);
+        }
+      } catch (e) {}
     };
   </script>
 </body>
