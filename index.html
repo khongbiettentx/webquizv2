@@ -1902,6 +1902,13 @@
         }));
       });
 
+      // Dọn tiến độ SRS của câu hỏi không còn tồn tại (chỉ chạy khi ngân hàng đề có dữ liệu)
+      if (bankData.subjects.some(sub => sub.questions.length)) {
+        const liveIds = new Set();
+        bankData.subjects.forEach(sub => sub.questions.forEach(q => liveIds.add(q.id)));
+        Object.keys(srsProgressMap).forEach(k => { if (!liveIds.has(k)) delete srsProgressMap[k]; });
+      }
+
       pomodoroSec = (studyLogsAndSettings.settings.pomodoroMinutes || 25) * 60;
       updatePomodoroLabel();
       applyVisualPreferences();
@@ -4945,6 +4952,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
             <select id="mpSub" class="${inp}">${subs}</select>
             <div class="flex gap-2"><select id="mpN" class="${inp}"><option value="5">5 câu</option><option value="10" selected>10 câu</option><option value="15">15 câu</option><option value="20">20 câu</option></select>
             <select id="mpSec" class="${inp}"><option value="15">15 giây/câu</option><option value="20" selected>20 giây/câu</option><option value="30">30 giây/câu</option></select></div>
+            <label class="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" id="mpShuffle" checked> Xáo trộn thứ tự đáp án (công bằng hơn)</label>
             <button onclick="mpHost()" class="${btn}bg-fuchsia-600 hover:bg-fuchsia-500">Tạo phòng</button></div>
           <div class="${card}"><h3 class="font-extrabold text-slate-900">🔑 Vào phòng của bạn bè</h3>
             <input id="mpPin" inputmode="numeric" maxlength="5" placeholder="Nhập PIN 5 số" class="${inp}">
@@ -4974,10 +4982,49 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
       }
     }
 
+    /* Làm sạch mọi tin nhắn nhận từ mạng: chủ phòng là người lạ có thể gửi dữ liệu độc hại */
+    function mpCleanBoard(b) {
+      return (Array.isArray(b) ? b : []).slice(0, 30).map(x => {
+        x = x || {};
+        return { name: String(x.name == null ? '' : x.name).slice(0, 24), score: Math.round(+x.score) || 0, delta: Math.round(+x.delta) || 0 };
+      });
+    }
+    function mpCleanMsg(d) {
+      if (!d || typeof d !== 'object') return null;
+      const str = (v, n) => String(v == null ? '' : v).slice(0, n);
+      const num = v => (Number.isFinite(+v) ? +v : 0);
+      switch (d.t) {
+        case 'welcome': return { t: 'welcome', name: str(d.name, 24) };
+        case 'lobby': return { t: 'lobby', names: (Array.isArray(d.names) ? d.names : []).slice(0, 30).map(n => str(n, 24)) };
+        case 'q': {
+          const opts = {};
+          if (d.opts && typeof d.opts === 'object') Object.keys(d.opts).slice(0, 8).forEach(k => { if (/^[A-Z]$/.test(k)) opts[k] = str(d.opts[k], 500); });
+          if (Object.keys(opts).length < 2) return null;
+          return { t: 'q', i: num(d.i), n: num(d.n), text: str(d.text, 2000), opts, sec: Math.min(Math.max(num(d.sec) || 20, 5), 120) };
+        }
+        case 'r': return { t: 'r', correct: /^[A-Z]$/.test(d.correct) ? d.correct : '', board: mpCleanBoard(d.board) };
+        case 'end': return { t: 'end', board: mpCleanBoard(d.board) };
+        case 'full': return { t: 'full', msg: str(d.msg, 200) };
+      }
+      return null;
+    }
+    // Dựng câu hỏi gửi đi; xáo trộn đáp án trừ khi phương án tự nhắc đến chữ cái (vd "Cả A và B đều đúng")
+    const MP_LETTER_REF = /\b[A-D]\s*(và|,|&|hoặc)\s*[A-D]\b|\b(đáp án|phương án)\s*[A-D]\b/i;
+    function mpBuildQuestion(q, shuffle) {
+      const keys = Object.keys(q.options || {}).filter(k => q.options[k]).slice(0, 8);
+      const opts = {}; let correct = q.answer;
+      if (shuffle && !keys.some(k => MP_LETTER_REF.test(q.options[k]))) {
+        const letters = 'ABCDEFGH';
+        shuf(keys).forEach((k, i) => { opts[letters[i]] = q.options[k]; if (k === q.answer) correct = letters[i]; });
+      } else keys.forEach(k => { opts[k] = q.options[k]; });
+      return { opts, correct };
+    }
+
     function mpSend(o) { Object.values(mp.conns).forEach(c => c.open && c.send(o)); mpOnMsg(o); }
 
     function mpOnMsg(d) {
       if (!mp) return;
+      d = mpCleanMsg(d); if (!d) return;
       if (d.t === 'welcome') mp.me = d.name;
       else if (d.t === 'lobby') { mp.names = d.names; if (mp.phase === 'connecting' || mp.phase === 'lobby') mp.phase = 'lobby'; }
       else if (d.t === 'q') {
@@ -4994,10 +5041,10 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
     }
 
     function mpAnswer(key) {
-      if (!mp || mp.myAnswer || mp.phase !== 'question') return;
+      if (!mp || mp.myAnswer || mp.phase !== 'question' || !mp.q || !mp.q.opts[key]) return;
       mp.myAnswer = key;
       const ms = Date.now() - mp.startAt;
-      if (mp.role === 'host') mpHostAnswer('host', key, ms); else mp.conn.send({ t: 'a', key, ms });
+      if (mp.role === 'host') mpHostAnswer('host', key); else mp.conn.send({ t: 'a', key, ms });
       mpRender();
     }
 
@@ -5020,34 +5067,45 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
 
     function mpHost() {
       const name = mpSaveName(), sub = bankData.subjects.find(s => s.id === mpEl('mpSub').value);
-      const pool = (sub ? sub.questions : []).filter(q => !isTheoryQuestion(q) && q.answer && Object.values(q.options || {}).filter(Boolean).length >= 2);
+      const pool = (sub ? sub.questions : []).filter(q => !isTheoryQuestion(q) && q.answer && (q.options || {})[q.answer] && Object.values(q.options || {}).filter(Boolean).length >= 2);
       if (!pool.length) return mpErr('Môn này chưa có câu trắc nghiệm.');
       if (typeof Peer === 'undefined') return mpErr('Cần có mạng để chơi cùng bạn bè.');
       const n = Math.min(+mpEl('mpN').value, pool.length), sec = +mpEl('mpSec').value;
-      const pin = String(Math.floor(10000 + Math.random() * 90000));
-      const my = mp = { phase: 'connecting', role: 'host', pin, pool, cfg: { n, sec }, conns: {}, players: { host: { name, score: 0, streak: 0 } }, names: [name], me: name };
+      const shuffle = !mpEl('mpShuffle') || mpEl('mpShuffle').checked;
+      const my = mp = { phase: 'connecting', role: 'host', pin: '', pool, cfg: { n, sec, shuffle }, conns: {}, players: { host: { name, score: 0, streak: 0 } }, names: [name], me: name };
       mpRender();
-      const peer = new Peer('qm-' + pin); my.peer = peer;
-      peer.on('error', e => { if (mp === my) mpErr('Không tạo được phòng (' + e.type + '). Hãy thử lại.'); });
-      peer.on('open', () => { if (mp === my) { my.phase = 'lobby'; mpRender(); } });
-      peer.on('connection', c => {
-        c.on('data', d => { if (mp === my) mpHostMsg(c, d); });
-        c.on('close', () => { if (mp === my) mpHostLeave(c); });
-      });
+      let tries = 0;
+      const open = () => {
+        my.pin = String(Math.floor(10000 + Math.random() * 90000));
+        const peer = new Peer('qm-' + my.pin); my.peer = peer;
+        peer.on('error', e => {
+          if (mp !== my) return;
+          if (e.type === 'unavailable-id' && tries++ < 4) { try { peer.destroy(); } catch (x) {} open(); return; } // PIN trùng → đổi PIN khác
+          mpErr('Không tạo được phòng (' + e.type + '). Hãy thử lại.');
+        });
+        peer.on('open', () => { if (mp === my) { my.phase = 'lobby'; mpRender(); } });
+        peer.on('connection', c => {
+          c.on('data', d => { if (mp === my) mpHostMsg(c, d); });
+          c.on('close', () => { if (mp === my) mpHostLeave(c); });
+        });
+      };
+      open();
     }
 
     function mpLobbyNames() { return Object.values(mp.players).map(p => p.name); }
 
     function mpHostMsg(c, d) {
+      if (!d || typeof d !== 'object') return;
       if (d.t === 'join') {
         if (mp.phase !== 'lobby') { c.send({ t: 'full', msg: 'Ván đã bắt đầu, hãy chờ ván sau.' }); return; }
         if (mp.conns[c.peer]) return;
-        const base = String(d.name || 'Bạn').slice(0, 16); let u = base, i = 2;
+        if (Object.keys(mp.players).length >= 12) { c.send({ t: 'full', msg: 'Phòng đã đủ 12 người.' }); return; }
+        const base = String(d.name == null ? '' : d.name).trim().slice(0, 16) || 'Bạn'; let u = base, i = 2;
         while (Object.values(mp.players).some(p => p.name === u)) u = base + ' ' + i++;
         mp.conns[c.peer] = c; mp.players[c.peer] = { name: u, score: 0, streak: 0 };
         c.send({ t: 'welcome', name: u });
         mpSend({ t: 'lobby', names: mpLobbyNames() });
-      } else if (d.t === 'a') mpHostAnswer(c.peer, d.key, d.ms);
+      } else if (d.t === 'a') mpHostAnswer(c.peer, d.key);
     }
 
     function mpHostLeave(c) {
@@ -5066,16 +5124,18 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
     function mpNext() {
       if (!mp || mp.role !== 'host') return;
       if (mp.qi >= mp.order.length) { mpSend({ t: 'end', board: mpBoard() }); return; }
-      const q = mp.order[mp.qi], opts = {};
-      Object.keys(q.options).forEach(k => { if (q.options[k]) opts[k] = q.options[k]; });
-      mp.cur = q; mp.answers = {};
-      mpSend({ t: 'q', i: mp.qi, n: mp.order.length, text: q.question, opts, sec: mp.cfg.sec });
+      const q = mp.order[mp.qi], built = mpBuildQuestion(q, mp.cfg.shuffle);
+      mp.cur = q; mp.curOpts = built.opts; mp.curCorrect = built.correct; mp.answers = {};
+      mp.qStart = Date.now();
+      mpSend({ t: 'q', i: mp.qi, n: mp.order.length, text: q.question, opts: built.opts, sec: mp.cfg.sec });
       mp.rt = setTimeout(mpReveal, mp.cfg.sec * 1000 + 1500);
     }
 
-    function mpHostAnswer(id, key, ms) {
+    function mpHostAnswer(id, key) {
       if (!mp || mp.phase !== 'question' || mp.answers[id] || !mp.players[id]) return;
-      mp.answers[id] = { key, ms: Math.max(0, +ms || 0) };
+      if (typeof key !== 'string' || !Object.prototype.hasOwnProperty.call(mp.curOpts || {}, key)) return;
+      // Thời gian do chủ phòng tự đo, không tin số liệu người chơi gửi (chống gian lận điểm tốc độ)
+      mp.answers[id] = { key, ms: Math.max(0, Date.now() - mp.qStart) };
       mpCheckAll();
     }
     function mpCheckAll() { if (Object.keys(mp.players).every(id => mp.answers[id])) mpReveal(); }
@@ -5083,7 +5143,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
     function mpReveal() {
       clearTimeout(mp.rt);
       if (mp.phase !== 'question') return;
-      const correct = mp.cur.answer, secMs = mp.cfg.sec * 1000;
+      const correct = mp.curCorrect, secMs = mp.cfg.sec * 1000;
       Object.keys(mp.players).forEach(id => {
         const p = mp.players[id], a = mp.answers[id];
         if (a && a.key === correct) { p.streak++; p.delta = Math.round(1000 * (1 - Math.min(a.ms, secMs) / secMs / 2)) + Math.min(p.streak - 1, 5) * 50; }
@@ -5116,35 +5176,65 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
         const data = await res.json();
         const subs = Array.isArray(data) ? data : (data.subjects || (data.bankData && data.bankData.subjects));
         if (!Array.isArray(subs)) throw new Error('Sai định dạng (cần có "subjects")');
-        let added = 0, updated = 0, newSubs = 0;
+        let added = 0, updated = 0, newSubs = 0, relinked = 0;
+        const okId = v => typeof v === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(v);
+        const genId = (pre, n) => pre + Date.now() + '_' + Math.random().toString(36).slice(2, 2 + n);
+        const usedQ = new Set(), usedS = new Set(bankData.subjects.map(x => x.id));
+        bankData.subjects.forEach(x => x.questions.forEach(q => usedQ.add(q.id)));
+        const FIELDS = ['question', 'answer', 'theoryAnswer', 'explanation', 'topic', 'kind'];
         subs.forEach(inSub => {
           if (!inSub || !inSub.name || !Array.isArray(inSub.questions)) return;
-          let sub = bankData.subjects.find(s => normQ(s.name) === normQ(inSub.name));
+          // Môn: ưu tiên khớp theo id, sau đó mới theo tên
+          let sub = (okId(inSub.id) && bankData.subjects.find(x => x.id === inSub.id))
+            || bankData.subjects.find(x => normQ(x.name) === normQ(inSub.name));
           if (!sub) {
-            sub = { id: 'sub_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), name: String(inSub.name), questions: [] };
-            bankData.subjects.push(sub); newSubs++;
+            const sid = (okId(inSub.id) && !usedS.has(inSub.id)) ? inSub.id : genId('sub_', 4);
+            sub = { id: sid, name: String(inSub.name), questions: [] };
+            usedS.add(sid); bankData.subjects.push(sub); newSubs++;
           }
-          const idx = new Map(sub.questions.map(q => [normQ(q.question), q]));
+          const claimed = new Set();
+          const pairs = [];      // [câu cục bộ, câu từ de.json]
+          const pending = [];    // câu từ de.json chưa khớp theo id
+          const byId = new Map(sub.questions.map(q => [q.id, q]));
+          // Lượt 1: khớp theo id (cách chính, ổn định khi sửa chữ trong câu hỏi)
           inSub.questions.forEach(iq => {
             if (!iq || !iq.question) return;
-            const ex = idx.get(normQ(iq.question));
-            if (ex) {
-              let ch = false;
-              ['answer', 'theoryAnswer', 'explanation'].forEach(k => { if ((iq[k] || '') !== (ex[k] || '')) { ex[k] = iq[k] || ''; ch = true; } });
-              if (JSON.stringify(iq.options || {}) !== JSON.stringify(ex.options || {})) { ex.options = iq.options || {}; ch = true; }
-              if (ch) updated++;
+            const ex = okId(iq.id) ? byId.get(iq.id) : null;
+            if (ex && !claimed.has(ex)) { claimed.add(ex); pairs.push([ex, iq]); } else pending.push(iq);
+          });
+          // Lượt 2: dự phòng theo nội dung cho dữ liệu cũ chưa có id, rồi gắn id chuẩn
+          const byText = new Map();
+          sub.questions.forEach(q => { if (claimed.has(q)) return; const k = normQ(q.question); if (!byText.has(k)) byText.set(k, []); byText.get(k).push(q); });
+          pending.forEach(iq => {
+            const cand = (byText.get(normQ(iq.question)) || []).find(q => !claimed.has(q));
+            if (cand) {
+              claimed.add(cand); pairs.push([cand, iq]);
+              if (okId(iq.id) && iq.id !== cand.id && !usedQ.has(iq.id)) {
+                // Chuyển tiến độ SRS sang id mới để không mất lịch ôn
+                if (srsProgressMap[cand.id] && !srsProgressMap[iq.id]) srsProgressMap[iq.id] = srsProgressMap[cand.id];
+                delete srsProgressMap[cand.id];
+                usedQ.delete(cand.id); cand.id = iq.id; usedQ.add(iq.id); relinked++;
+              }
             } else {
-              const nq = Object.assign({}, iq, { id: 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) });
+              const nid = (okId(iq.id) && !usedQ.has(iq.id)) ? iq.id : genId('q_', 5);
+              const nq = Object.assign({}, iq, { id: nid });
               delete nq.starred; delete nq.note;
-              sub.questions.push(nq); idx.set(normQ(nq.question), nq); added++;
+              usedQ.add(nid); sub.questions.push(nq); added++;
             }
+          });
+          // Cập nhật các câu đã khớp (giữ nguyên starred, note và tiến độ ôn)
+          pairs.forEach(([ex, iq]) => {
+            let ch = false;
+            FIELDS.forEach(k => { if (iq[k] !== undefined && (iq[k] || '') !== (ex[k] || '')) { ex[k] = iq[k] || ''; ch = true; } });
+            if (JSON.stringify(iq.options || {}) !== JSON.stringify(ex.options || {})) { ex.options = iq.options || {}; ch = true; }
+            if (ch) updated++;
           });
         });
         try { localStorage.setItem(SYNC_URL_KEY, url); } catch (e) {}
-        if (added || updated || newSubs) {
+        if (added || updated || newSubs || relinked) {
           saveAllStores(); renderSubjectTabs(); updateGlobalStats(); initBankView(); refreshActiveView();
         }
-        const msg = (added || updated || newSubs)
+        const msg = (added || updated || newSubs || relinked)
           ? `✅ Đồng bộ: +${added} câu mới, ${updated} câu được cập nhật${newSubs ? `, ${newSubs} môn mới` : ''}.`
           : '✅ Bạn đang có bộ đề mới nhất.';
         say(msg);
@@ -5159,8 +5249,9 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
         schemaVersion: 'quizmaster_questions_v1',
         exportedAt: new Date().toISOString(),
         subjects: bankData.subjects.map(s => ({
+          id: s.id,
           name: s.name,
-          questions: s.questions.map(q => { const c = Object.assign({}, q); delete c.id; delete c.starred; delete c.note; return c; })
+          questions: s.questions.map(q => { const c = Object.assign({}, q); delete c.starred; delete c.note; return c; })
         }))
       };
       const a = document.createElement('a');
