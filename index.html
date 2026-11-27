@@ -5402,13 +5402,34 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
         const FIELDS = ['question', 'image', 'answer', 'theoryAnswer', 'explanation', 'topic', 'kind'];
         subs.forEach(inSub => {
           if (!inSub || !inSub.name || !Array.isArray(inSub.questions)) return;
-          // Môn: ưu tiên khớp theo id, sau đó mới theo tên
-          let sub = (okId(inSub.id) && bankData.subjects.find(x => x.id === inSub.id))
-            || bankData.subjects.find(x => normQ(x.name) === normQ(inSub.name));
+          // Môn: ưu tiên khớp theo id, sau đó theo tên; gộp và xóa môn trùng lặp nếu có
+          const nameLower = normQ(inSub.name);
+          const idMatch = okId(inSub.id) ? bankData.subjects.find(x => x.id === inSub.id) : null;
+          const nameMatches = bankData.subjects.filter(x => normQ(x.name) === nameLower);
+          let sub = idMatch || nameMatches[0];
           if (!sub) {
             const sid = (okId(inSub.id) && !usedS.has(inSub.id)) ? inSub.id : genId('sub_', 4);
             sub = { id: sid, name: String(inSub.name), questions: [] };
             usedS.add(sid); bankData.subjects.push(sub); newSubs++;
+          } else {
+            const dupSubs = bankData.subjects.filter(x => x !== sub && (normQ(x.name) === nameLower || (okId(inSub.id) && x.id === inSub.id)));
+            if (dupSubs.length) {
+              const seenInSub = new Set(sub.questions.map(q => q.id + '|' + normQ(q.question)));
+              dupSubs.forEach(dSub => {
+                (dSub.questions || []).forEach(dq => {
+                  const sig = dq.id + '|' + normQ(dq.question);
+                  if (!seenInSub.has(sig)) {
+                    sub.questions.push(dq);
+                    seenInSub.add(sig);
+                  }
+                });
+              });
+              bankData.subjects = bankData.subjects.filter(x => !dupSubs.includes(x));
+              if (dupSubs.some(d => d.id === studyLogsAndSettings.activeSubjectId)) {
+                studyLogsAndSettings.activeSubjectId = sub.id;
+              }
+            }
+            if (inSub.name && sub.name !== String(inSub.name)) sub.name = String(inSub.name);
           }
           const claimed = new Set();
           const pairs = [];      // [câu cục bộ, câu từ de.json]
@@ -5440,6 +5461,35 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
               usedQ.add(nid); sub.questions.push(nq); added++;
             }
           });
+          // Xóa các câu trùng lặp cũ trong cùng môn (giữ lại câu có ghi chú/tiến độ hoặc câu mới nhất)
+          let removedDupQ = 0;
+          const keepMap = new Map();
+          const orderedQs = sub.questions.slice();
+          orderedQs.forEach(qItem => {
+            const tKey = normQ(qItem.question);
+            if (!tKey) return;
+            if (!keepMap.has(tKey)) {
+              keepMap.set(tKey, qItem);
+            } else {
+              const prev = keepMap.get(tKey);
+              const prevScore = (prev.note ? 2 : 0) + (prev.starred ? 2 : 0) + (srsProgressMap[prev.id] ? 1 : 0);
+              const curScore = (qItem.note ? 2 : 0) + (qItem.starred ? 2 : 0) + (srsProgressMap[qItem.id] ? 1 : 0);
+              const winner = curScore > prevScore ? qItem : prev;
+              const loser = winner === qItem ? prev : qItem;
+              if (winner.id !== loser.id && srsProgressMap[loser.id] && !srsProgressMap[winner.id]) {
+                srsProgressMap[winner.id] = srsProgressMap[loser.id];
+              }
+              if (winner.id !== loser.id) delete srsProgressMap[loser.id];
+              keepMap.set(tKey, winner);
+              removedDupQ++;
+            }
+          });
+          if (removedDupQ > 0) {
+            const keepSet = new Set(keepMap.values());
+            sub.questions = sub.questions.filter(qItem => keepSet.has(qItem));
+            added = Math.max(0, added - removedDupQ);
+          }
+
           // Cập nhật các câu đã khớp (giữ nguyên starred, note và tiến độ ôn)
           pairs.forEach(([ex, iq]) => {
             let ch = false;
