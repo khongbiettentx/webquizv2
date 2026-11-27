@@ -12,6 +12,7 @@
        2. Mammoth.js CDN: Chỉ dùng khi đọc file .docx từ máy tính; file .txt và .json hoạt động 100% offline không cần thư viện. -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
@@ -120,6 +121,26 @@
       background-color: #e7decb !important;
       color: #4a3d2f !important;
     }
+
+    /* Giao diện mới: AMOLED, Đại dương (tối) · Bạc hà, Hồng pastel (sáng) */
+    body.theme-amoled { background: #000; background-image: none; }
+    body.theme-amoled header, body.theme-amoled #mobileBottomNav, body.theme-amoled #mainHeaderSubbar { background-color: #000 !important; border-color: #1f1f1f !important; }
+    body.theme-amoled .bg-white { background-color: #0a0a0a !important; border-color: #232323 !important; }
+    body.theme-amoled .bg-slate-50 { background-color: #050505 !important; border-color: #232323 !important; }
+    body.theme-amoled .bg-slate-100 { background-color: #171717 !important; }
+    body.theme-ocean { background: #06202b; background-image: none; }
+    body.theme-ocean header, body.theme-ocean #mobileBottomNav, body.theme-ocean #mainHeaderSubbar { background-color: #082a38 !important; border-color: #14566e !important; }
+    body.theme-ocean .bg-white { background-color: #0c3446 !important; border-color: #14566e !important; }
+    body.theme-ocean .bg-slate-50 { background-color: #082a38 !important; border-color: #14566e !important; }
+    body.theme-ocean .bg-slate-100 { background-color: #0f4054 !important; }
+    body.theme-mint { background: #ecfdf5; background-image: none; }
+    body.theme-mint header, body.theme-mint #mobileBottomNav, body.theme-mint .bg-white { background-color: #f7fffb !important; border-color: #bfe9d6 !important; }
+    body.theme-mint #mainHeaderSubbar, body.theme-mint .bg-slate-50 { background-color: #e3f7ee !important; border-color: #bfe9d6 !important; }
+    body.theme-mint .bg-slate-100 { background-color: #d3f0e3 !important; }
+    body.theme-rose { background: #fff1f5; background-image: none; }
+    body.theme-rose header, body.theme-rose #mobileBottomNav, body.theme-rose .bg-white { background-color: #fffafb !important; border-color: #f6cfdc !important; }
+    body.theme-rose #mainHeaderSubbar, body.theme-rose .bg-slate-50 { background-color: #ffe8ef !important; border-color: #f6cfdc !important; }
+    body.theme-rose .bg-slate-100 { background-color: #fbd9e4 !important; }
 
     /* Chế độ tập trung (Focus Mode): Ẩn bớt thanh công cụ gây xao nhãng */
     body.focus-mode-active #mainHeaderSubbar,
@@ -1426,7 +1447,11 @@
           <select id="setColorTheme" class="px-3 py-1.5 rounded-xl border border-slate-300 font-bold bg-white">
             <option value="light">☀️ Nền Sáng (Mặc định)</option>
             <option value="dark">🌙 Nền Tối (Ban đêm)</option>
+            <option value="mint">🌿 Bạc hà sáng</option>
+            <option value="rose">🌸 Hồng pastel</option>
             <option value="sepia">📜 Giấy dịu mắt (Sepia)</option>
+            <option value="ocean">🌊 Đại dương tối</option>
+            <option value="amoled">⚫ Đen AMOLED</option>
           </select>
         </div>
 
@@ -1542,6 +1567,14 @@
   </div>
 
   <!-- Thông báo Toast nổi góc dưới -->
+  <button onclick="mpOpen()" class="fixed right-3 bottom-20 md:bottom-5 z-40 px-4 py-3 rounded-full bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-sm font-extrabold shadow-lg">🎮 Chơi cùng bạn bè</button>
+  <div id="mpOverlay" class="hidden fixed inset-0 z-50 bg-white overflow-y-auto">
+    <div class="sticky top-0 bg-fuchsia-600 text-white px-4 py-3 flex items-center justify-between z-10">
+      <b class="text-sm sm:text-base">🎮 Phòng chơi cùng bạn bè</b>
+      <button onclick="mpClose()" class="px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-bold">✕ Thoát</button>
+    </div>
+    <div id="mpBody" class="max-w-xl mx-auto p-4 space-y-4"></div>
+  </div>
   <div id="toastNotification" class="hidden fixed bottom-16 md:bottom-5 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-lg z-50 whitespace-nowrap"></div>
 
   <script>
@@ -2019,19 +2052,25 @@
     /* =========================================================================
        NHÓM 4: GIAO DIỆN SÁNG/TỐI, CỠ CHỮ, POMODORO, FOCUS MODE & ÂM THANH
        ========================================================================= */
+    const THEME_ORDER = ['light', 'mint', 'rose', 'sepia', 'dark', 'ocean', 'amoled'];
+    const THEME_META = {
+      light: ['☀️', 'Sáng', 'Nền Sáng'], mint: ['🌿', 'Bạc hà', 'Bạc hà sáng'], rose: ['🌸', 'Hồng', 'Hồng pastel'],
+      sepia: ['📜', 'Dịu mắt', 'Giấy dịu mắt'], dark: ['🌙', 'Tối', 'Nền Tối'], ocean: ['🌊', 'Đại dương', 'Đại dương tối'], amoled: ['⚫', 'AMOLED', 'Đen AMOLED']
+    };
+
     function applyVisualPreferences() {
       const s = studyLogsAndSettings.settings;
-      document.body.classList.remove('theme-dark', 'theme-sepia', 'no-animations');
-      if (s.theme === 'dark') document.body.classList.add('theme-dark');
-      else if (s.theme === 'sepia') document.body.classList.add('theme-sepia');
+      document.body.classList.remove('theme-dark', 'theme-sepia', 'theme-amoled', 'theme-ocean', 'theme-mint', 'theme-rose', 'no-animations');
+      const th = THEME_META[s.theme] ? s.theme : 'light';
+      if (th === 'dark' || th === 'amoled' || th === 'ocean') document.body.classList.add('theme-dark');
+      if (th !== 'light' && th !== 'dark') document.body.classList.add('theme-' + th);
       if (s.animationsEnabled === false) document.body.classList.add('no-animations');
 
       const icon = document.getElementById('themeToggleIcon');
       const lbl = document.getElementById('themeToggleLabel');
       if (icon && lbl) {
-        if (s.theme === 'dark') { icon.textContent = '🌙'; lbl.textContent = 'Tối'; }
-        else if (s.theme === 'sepia') { icon.textContent = '📜'; lbl.textContent = 'Dịu mắt'; }
-        else { icon.textContent = '☀️'; lbl.textContent = 'Sáng'; }
+        const m = THEME_META[s.theme] || THEME_META.light;
+        icon.textContent = m[0]; lbl.textContent = m[1];
       }
 
       const qEl = document.getElementById('practiceQuestionText');
@@ -2044,14 +2083,13 @@
     }
 
     function cycleColorTheme() {
-      const order = ['light', 'dark', 'sepia'];
+      const order = THEME_ORDER;
       const curr = studyLogsAndSettings.settings.theme || 'light';
       const next = order[(order.indexOf(curr) + 1) % order.length];
       studyLogsAndSettings.settings.theme = next;
       applyVisualPreferences();
       saveAllStores();
-      const names = { light: '☀️ Nền Sáng', dark: '🌙 Nền Tối', sepia: '📜 Giấy dịu mắt' };
-      showToast(`Đã chuyển giao diện: ${names[next]}`);
+      showToast(`Đã chuyển giao diện: ${THEME_META[next][0]} ${THEME_META[next][2]}`);
     }
 
     function cycleQuestionFontSize() {
@@ -2977,6 +3015,14 @@
           <div class="text-xs text-purple-200 mt-1">Các câu đánh dấu "Cần ôn lại" sẽ tự động xuất hiện ưu tiên ở lượt sau.</div>
         </div>
       `;
+      if (studyLogsAndSettings.settings.kahootMode && kahootScore > 0) {
+        const st = studyLogsAndSettings.settings;
+        st.kahootBoard = (st.kahootBoard || []).concat({ score: kahootScore, acc, date: getTodayDateKey(0) })
+          .sort((a, b) => b.score - a.score).slice(0, 5);
+        saveAllStores();
+        const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+        document.getElementById('podiumStages').innerHTML += `<div class="bg-white/10 rounded-2xl p-4 border border-white/20 w-full max-w-sm text-left text-xs text-white space-y-1"><div class="font-extrabold text-amber-300 mb-1">🏆 Top 5 điểm cao của bạn</div>${st.kahootBoard.map((b, i) => `<div class="flex justify-between"><span>${medals[i]} ${b.score} điểm</span><span class="text-purple-200">${b.acc}% • ${b.date}</span></div>`).join('')}</div>`;
+      }
       document.getElementById('practiceCard').classList.add('hidden');
       document.getElementById('kahootPodiumModal').classList.remove('hidden');
     }
@@ -3960,7 +4006,7 @@ Lời giải : Hub hoạt động ở tầng Vật lý (Layer 1), phát quảng 
       if (!activeExam || !activeExam.result) return;
       const r = activeExam.result;
       document.getElementById('resScore10').textContent = r.score10;
-      document.getElementById('resTimeInfo').textContent = `Nộp bài lúc ${r.finishedAt} • Thời gian hoàn thành: ${r.timeStr}`;
+      document.getElementById('resTimeInfo').textContent = `Nộp bài lúc ${r.finishedAt} • Thời gian hoàn thành: ${r.timeStr}${activeExam.switches ? ` • ⚠️ Rời tab thi: ${activeExam.switches} lần` : ''}`;
       document.getElementById('resRightNum').textContent = r.right;
       document.getElementById('resWrongNum').textContent = r.wrong;
       document.getElementById('resUnansweredNum').textContent = r.unanswered;
@@ -4861,6 +4907,198 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
       event.target.value = '';
     }
 
+    /* CHƠI CÙNG BẠN BÈ (PeerJS: chủ phòng giữ luật chơi, không cần server riêng) */
+    const MP_COLORS = ['#e21b3c', '#1368ce', '#d89e00', '#26890c'];
+    let mp = null;
+    const mpEl = id => document.getElementById(id);
+    function mpName() { try { return localStorage.getItem('qm_mp_name') || ''; } catch (e) { return ''; } }
+    function mpSaveName() {
+      const v = (mpEl('mpName').value.trim() || 'Bạn').slice(0, 16);
+      try { localStorage.setItem('qm_mp_name', v); } catch (e) {}
+      return v;
+    }
+    function mpReset() {
+      if (mp) { clearInterval(mp.tick); clearTimeout(mp.rt); try { mp.peer && mp.peer.destroy(); } catch (e) {} }
+      mp = null;
+    }
+    function mpOpen() { mpReset(); mp = { phase: 'menu' }; mpEl('mpOverlay').classList.remove('hidden'); mpRender(); }
+    function mpClose() { mpReset(); mpEl('mpOverlay').classList.add('hidden'); }
+    function mpErr(m) { mpReset(); mp = { phase: 'menu', err: m }; mpRender(); }
+
+    function mpBoardHtml(list, card) {
+      const medals = ['🥇', '🥈', '🥉'];
+      return `<div class="${card}"><h3 class="font-extrabold text-slate-900">🏆 Bảng xếp hạng</h3>${list.map((x, i) => `
+        <div class="flex justify-between text-sm py-1 border-b border-slate-100 last:border-none ${x.name === mp.me ? 'font-extrabold text-fuchsia-600' : 'text-slate-800'}">
+          <span>${medals[i] || (i + 1) + '.'} ${escapeHTML(x.name)}</span><span>${x.score}${x.delta ? ` <span class="text-emerald-600 text-xs">+${x.delta}</span>` : ''}</span></div>`).join('')}</div>`;
+    }
+
+    function mpRender() {
+      const b = mpEl('mpBody'); if (!mp || !b) return;
+      const card = 'bg-white rounded-2xl border border-slate-200 p-5 space-y-3 shadow-2xs';
+      const inp = 'w-full px-3 py-2 rounded-xl border border-slate-300 text-sm';
+      const btn = 'w-full px-4 py-3 rounded-xl text-white font-extrabold text-sm ';
+      if (mp.phase === 'menu') {
+        const subs = bankData.subjects.map(s => `<option value="${s.id}">${escapeHTML(s.name)}</option>`).join('');
+        b.innerHTML = `${mp.err ? `<div class="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">❌ ${escapeHTML(mp.err)}</div>` : ''}
+          <div class="${card}"><label class="block text-xs font-bold text-slate-700">Tên của bạn</label><input id="mpName" value="${escapeHTML(mpName())}" maxlength="16" class="${inp}"></div>
+          <div class="${card}"><h3 class="font-extrabold text-slate-900">👑 Tạo phòng (bạn làm chủ phòng)</h3>
+            <select id="mpSub" class="${inp}">${subs}</select>
+            <div class="flex gap-2"><select id="mpN" class="${inp}"><option value="5">5 câu</option><option value="10" selected>10 câu</option><option value="15">15 câu</option><option value="20">20 câu</option></select>
+            <select id="mpSec" class="${inp}"><option value="15">15 giây/câu</option><option value="20" selected>20 giây/câu</option><option value="30">30 giây/câu</option></select></div>
+            <button onclick="mpHost()" class="${btn}bg-fuchsia-600 hover:bg-fuchsia-500">Tạo phòng</button></div>
+          <div class="${card}"><h3 class="font-extrabold text-slate-900">🔑 Vào phòng của bạn bè</h3>
+            <input id="mpPin" inputmode="numeric" maxlength="5" placeholder="Nhập PIN 5 số" class="${inp}">
+            <button onclick="mpJoin()" class="${btn}bg-indigo-600 hover:bg-indigo-500">Vào phòng</button></div>
+          <p class="text-[11px] text-slate-500 leading-relaxed">Cần có mạng. Ai cũng mở cùng link web này. Chủ phòng phải giữ màn hình mở trong suốt ván chơi.</p>`;
+      } else if (mp.phase === 'connecting') {
+        b.innerHTML = `<div class="${card} text-center font-bold text-slate-600">⏳ Đang kết nối…</div>`;
+      } else if (mp.phase === 'lobby') {
+        b.innerHTML = `<div class="${card} text-center"><div class="text-xs font-bold text-slate-500">PIN phòng</div><div class="text-5xl font-black tracking-widest text-fuchsia-600">${mp.pin || ''}</div><div class="text-xs text-slate-500">Bạn bè mở link web, bấm 🎮 rồi nhập PIN này</div></div>
+          <div class="${card}"><h3 class="font-extrabold text-slate-900">👥 Người chơi (${mp.names.length})</h3><div class="flex flex-wrap gap-2">${mp.names.map(n => `<span class="px-3 py-1 rounded-full bg-fuchsia-100 text-fuchsia-800 text-xs font-bold">${escapeHTML(n)}</span>`).join('')}</div></div>
+          ${mp.role === 'host' ? `<button onclick="mpStart()" class="${btn}bg-emerald-600 hover:bg-emerald-500">▶ Bắt đầu (${mp.cfg.n} câu)</button>` : '<div class="text-center text-sm font-bold text-slate-500">Đang chờ chủ phòng bắt đầu…</div>'}`;
+      } else if (mp.phase === 'question') {
+        const q = mp.q, keys = Object.keys(q.opts);
+        b.innerHTML = `<div class="flex justify-between text-xs font-extrabold text-slate-600"><span>Câu ${q.i + 1}/${q.n}</span><span>⏱ <b id="mpSec">${q.sec}</b>s</span></div>
+          <div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden"><div id="mpBar" class="h-full bg-fuchsia-500" style="width:100%"></div></div>
+          <div class="${card} text-base font-bold text-slate-900">${escapeHTML(q.text)}</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${keys.map((k, i) => `<button ${mp.myAnswer ? 'disabled' : ''} onclick="mpAnswer('${k}')" style="background:${MP_COLORS[i % 4]};opacity:${mp.myAnswer && mp.myAnswer !== k ? 0.4 : 1}" class="min-h-[72px] rounded-2xl text-white font-extrabold text-sm px-4 py-3 text-left shadow-md">${k}. ${escapeHTML(q.opts[k])}</button>`).join('')}</div>
+          ${mp.myAnswer ? '<div class="text-center text-xs font-bold text-slate-500">Đã chọn — chờ mọi người…</div>' : ''}`;
+      } else if (mp.phase === 'reveal') {
+        const me = mp.board.find(x => x.name === mp.me);
+        b.innerHTML = `<div class="${card} text-center"><div class="text-2xl font-extrabold">${mp.myAnswer === mp.correct ? '✅ Chính xác!' : '❌ Chưa đúng'}</div>
+          <div class="text-xs text-slate-600">Đáp án đúng: <b>${mp.correct}</b>${me && me.delta ? ` • +${me.delta} điểm` : ''}</div></div>${mpBoardHtml(mp.board.slice(0, 5), card)}
+          <div class="text-center text-xs text-slate-500">Câu tiếp theo sắp bắt đầu…</div>`;
+      } else if (mp.phase === 'end') {
+        b.innerHTML = `<div class="${card} text-center"><div class="text-3xl">🎉</div><div class="font-extrabold text-slate-900">Kết thúc ván chơi!</div></div>${mpBoardHtml(mp.board, card)}
+          <button onclick="mpOpen()" class="${btn}bg-fuchsia-600 hover:bg-fuchsia-500">Chơi lại / Về menu</button>`;
+      }
+    }
+
+    function mpSend(o) { Object.values(mp.conns).forEach(c => c.open && c.send(o)); mpOnMsg(o); }
+
+    function mpOnMsg(d) {
+      if (!mp) return;
+      if (d.t === 'welcome') mp.me = d.name;
+      else if (d.t === 'lobby') { mp.names = d.names; if (mp.phase === 'connecting' || mp.phase === 'lobby') mp.phase = 'lobby'; }
+      else if (d.t === 'q') {
+        clearInterval(mp.tick); mp.q = d; mp.myAnswer = null; mp.startAt = Date.now(); mp.phase = 'question';
+        mp.tick = setInterval(() => {
+          const left = Math.max(0, d.sec - (Date.now() - mp.startAt) / 1000), s = mpEl('mpSec'), bar = mpEl('mpBar');
+          if (s) s.textContent = Math.ceil(left);
+          if (bar) bar.style.width = (left / d.sec * 100) + '%';
+        }, 100);
+      } else if (d.t === 'r') { clearInterval(mp.tick); mp.correct = d.correct; mp.board = d.board; mp.phase = 'reveal'; }
+      else if (d.t === 'end') { clearInterval(mp.tick); mp.board = d.board; mp.phase = 'end'; }
+      else if (d.t === 'full') { mpErr(d.msg); return; }
+      mpRender();
+    }
+
+    function mpAnswer(key) {
+      if (!mp || mp.myAnswer || mp.phase !== 'question') return;
+      mp.myAnswer = key;
+      const ms = Date.now() - mp.startAt;
+      if (mp.role === 'host') mpHostAnswer('host', key, ms); else mp.conn.send({ t: 'a', key, ms });
+      mpRender();
+    }
+
+    function mpJoin() {
+      const name = mpSaveName(), pin = mpEl('mpPin').value.trim();
+      if (!/^\d{5}$/.test(pin)) return mpErr('PIN gồm 5 chữ số.');
+      if (typeof Peer === 'undefined') return mpErr('Cần có mạng để chơi cùng bạn bè.');
+      const my = mp = { phase: 'connecting', role: 'player', names: [] };
+      mpRender();
+      const peer = new Peer(); my.peer = peer;
+      const to = setTimeout(() => { if (mp === my) mpErr('Không tìm thấy phòng hoặc kết nối quá chậm.'); }, 12000);
+      peer.on('error', e => { clearTimeout(to); if (mp === my) mpErr(e.type === 'peer-unavailable' ? 'Không có phòng với PIN này.' : 'Lỗi kết nối: ' + e.type); });
+      peer.on('open', () => {
+        const c = peer.connect('qm-' + pin, { reliable: true }); my.conn = c;
+        c.on('open', () => { clearTimeout(to); c.send({ t: 'join', name }); });
+        c.on('data', d => { if (mp === my) mpOnMsg(d); });
+        c.on('close', () => { if (mp === my && mp.phase !== 'end') mpErr('Chủ phòng đã thoát hoặc mất kết nối.'); });
+      });
+    }
+
+    function mpHost() {
+      const name = mpSaveName(), sub = bankData.subjects.find(s => s.id === mpEl('mpSub').value);
+      const pool = (sub ? sub.questions : []).filter(q => !isTheoryQuestion(q) && q.answer && Object.values(q.options || {}).filter(Boolean).length >= 2);
+      if (!pool.length) return mpErr('Môn này chưa có câu trắc nghiệm.');
+      if (typeof Peer === 'undefined') return mpErr('Cần có mạng để chơi cùng bạn bè.');
+      const n = Math.min(+mpEl('mpN').value, pool.length), sec = +mpEl('mpSec').value;
+      const pin = String(Math.floor(10000 + Math.random() * 90000));
+      const my = mp = { phase: 'connecting', role: 'host', pin, pool, cfg: { n, sec }, conns: {}, players: { host: { name, score: 0, streak: 0 } }, names: [name], me: name };
+      mpRender();
+      const peer = new Peer('qm-' + pin); my.peer = peer;
+      peer.on('error', e => { if (mp === my) mpErr('Không tạo được phòng (' + e.type + '). Hãy thử lại.'); });
+      peer.on('open', () => { if (mp === my) { my.phase = 'lobby'; mpRender(); } });
+      peer.on('connection', c => {
+        c.on('data', d => { if (mp === my) mpHostMsg(c, d); });
+        c.on('close', () => { if (mp === my) mpHostLeave(c); });
+      });
+    }
+
+    function mpLobbyNames() { return Object.values(mp.players).map(p => p.name); }
+
+    function mpHostMsg(c, d) {
+      if (d.t === 'join') {
+        if (mp.phase !== 'lobby') { c.send({ t: 'full', msg: 'Ván đã bắt đầu, hãy chờ ván sau.' }); return; }
+        if (mp.conns[c.peer]) return;
+        const base = String(d.name || 'Bạn').slice(0, 16); let u = base, i = 2;
+        while (Object.values(mp.players).some(p => p.name === u)) u = base + ' ' + i++;
+        mp.conns[c.peer] = c; mp.players[c.peer] = { name: u, score: 0, streak: 0 };
+        c.send({ t: 'welcome', name: u });
+        mpSend({ t: 'lobby', names: mpLobbyNames() });
+      } else if (d.t === 'a') mpHostAnswer(c.peer, d.key, d.ms);
+    }
+
+    function mpHostLeave(c) {
+      if (!mp.players[c.peer]) return;
+      delete mp.conns[c.peer]; delete mp.players[c.peer];
+      if (mp.phase === 'lobby') mpSend({ t: 'lobby', names: mpLobbyNames() });
+      else if (mp.phase === 'question') mpCheckAll();
+    }
+
+    function mpStart() {
+      if (!mp || mp.role !== 'host' || mp.phase !== 'lobby') return;
+      mp.order = shuf(mp.pool).slice(0, mp.cfg.n); mp.qi = 0;
+      mpNext();
+    }
+
+    function mpNext() {
+      if (!mp || mp.role !== 'host') return;
+      if (mp.qi >= mp.order.length) { mpSend({ t: 'end', board: mpBoard() }); return; }
+      const q = mp.order[mp.qi], opts = {};
+      Object.keys(q.options).forEach(k => { if (q.options[k]) opts[k] = q.options[k]; });
+      mp.cur = q; mp.answers = {};
+      mpSend({ t: 'q', i: mp.qi, n: mp.order.length, text: q.question, opts, sec: mp.cfg.sec });
+      mp.rt = setTimeout(mpReveal, mp.cfg.sec * 1000 + 1500);
+    }
+
+    function mpHostAnswer(id, key, ms) {
+      if (!mp || mp.phase !== 'question' || mp.answers[id] || !mp.players[id]) return;
+      mp.answers[id] = { key, ms: Math.max(0, +ms || 0) };
+      mpCheckAll();
+    }
+    function mpCheckAll() { if (Object.keys(mp.players).every(id => mp.answers[id])) mpReveal(); }
+
+    function mpReveal() {
+      clearTimeout(mp.rt);
+      if (mp.phase !== 'question') return;
+      const correct = mp.cur.answer, secMs = mp.cfg.sec * 1000;
+      Object.keys(mp.players).forEach(id => {
+        const p = mp.players[id], a = mp.answers[id];
+        if (a && a.key === correct) { p.streak++; p.delta = Math.round(1000 * (1 - Math.min(a.ms, secMs) / secMs / 2)) + Math.min(p.streak - 1, 5) * 50; }
+        else { p.streak = 0; p.delta = 0; }
+        p.score += p.delta;
+      });
+      mpSend({ t: 'r', correct, board: mpBoard() });
+      mp.qi++;
+      mp.rt = setTimeout(mpNext, 4500);
+    }
+
+    function mpBoard() {
+      return Object.values(mp.players).map(p => ({ name: p.name, score: p.score, delta: p.delta || 0 })).sort((a, b) => b.score - a.score);
+    }
+
     /* ĐỒNG BỘ ĐỀ TỪ LINK (de.json) */
     const SYNC_URL_KEY = 'quizmaster_sync_url_v1';
     function normQ(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
@@ -5069,6 +5307,14 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
     /* =========================================================================
        NHÓM 12: PHÍM TẮT & KHỞI TẠO HỆ THỐNG
        ========================================================================= */
+    document.addEventListener('visibilitychange', () => {
+      const v = document.getElementById('view-exam');
+      if (document.hidden && activeExam && !activeExam.result && v && !v.classList.contains('hidden')) {
+        activeExam.switches = (activeExam.switches || 0) + 1;
+        showToast(`⚠️ Bạn vừa rời khỏi tab thi (lần ${activeExam.switches})`);
+      }
+    });
+
     window.addEventListener('keydown', e => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
 
