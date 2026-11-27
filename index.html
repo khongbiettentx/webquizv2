@@ -144,9 +144,13 @@
 
     /* Chế độ tập trung (Focus Mode): Ẩn bớt thanh công cụ gây xao nhãng */
     body.focus-mode-active #mainHeaderSubbar,
-    body.focus-mode-active #practiceControlBar,
-    body.focus-mode-active #mobileBottomNav {
+    body.focus-mode-active #mobileBottomNav,
+    body.focus-mode-active #practiceControlBar > div:first-child {
       display: none !important;
+    }
+    /* Focus mode: chỉ giữ lại thanh tiến độ mảnh */
+    body.focus-mode-active #practiceControlBar {
+      background: transparent !important; border-color: transparent !important; box-shadow: none !important; padding: 0 !important;
     }
     body.focus-mode-active main {
       padding-top: 0.75rem;
@@ -225,6 +229,11 @@
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #f1f5f9; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+    /* Menu thả xuống dùng chung */
+    .app-menu button { display:flex; align-items:center; gap:.5rem; width:100%; text-align:left; padding:.5rem .75rem; border-radius:.75rem; color:inherit; }
+    .app-menu button:hover { background:rgba(100,116,139,.15); }
+    .app-menu button.is-active { background:#eef2ff; color:#4338ca; }
+    .app-menu-opts button { border:1px solid #e2e8f0; font-weight:700; }
   </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -310,15 +319,10 @@
       </div>
     </div>
 
-    <!-- THANH CHỌN MÔN HỌC (TÁCH RIÊNG CHỈ SỐ THỐNG KÊ SANG TAB TỔNG QUAN) -->
+    <!-- THANH CHỌN MÔN HỌC (DẠNG MENU THẢ XUỐNG CHO GỌN) -->
     <div id="mainHeaderSubbar" class="bg-slate-50 border-t border-slate-200/80">
-      <div class="max-w-6xl mx-auto px-3 sm:px-4 py-1.5 flex items-center justify-between gap-2">
-        <div id="subjectTabList" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 flex-1"></div>
-
-        <button onclick="switchMainView('dashboard')" title="Xem chi tiết chuỗi ngày học & thống kê tiến độ"
-          class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-slate-200 hover:border-indigo-300 text-[11px] font-bold text-slate-600 shrink-0 transition">
-          <span>📊 Xem thống kê</span>
-        </button>
+      <div class="max-w-6xl mx-auto px-3 sm:px-4 py-1.5 flex items-center gap-2">
+        <div id="subjectTabList" class="relative min-w-0 flex-1 sm:flex-none"></div>
       </div>
     </div>
   </header>
@@ -365,6 +369,13 @@
          MỤC RIÊNG: TỔNG QUAN & THỐNG KÊ HỌC TẬP (CHUỖI NGÀY HỌC, TIẾN ĐỘ, LỊCH ÔN)
          ===================================================================== -->
     <section id="view-dashboard" class="hidden space-y-4">
+      <div id="backupReminder" class="hidden bg-amber-50 border border-amber-200 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="text-xs sm:text-sm text-amber-900 font-semibold leading-relaxed">💾 <span id="backupReminderText"></span></div>
+        <div class="flex gap-2 shrink-0">
+          <button onclick="exportAllDataJSON()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold">⬇️ Sao lưu ngay</button>
+          <button onclick="snoozeBackupReminder()" class="px-3.5 py-2 rounded-xl bg-white border border-amber-200 text-amber-800 text-xs font-bold hover:bg-amber-100">Để sau</button>
+        </div>
+      </div>
       <!-- Banner đề xuất học tập thông minh -->
       <div class="bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 text-white rounded-2xl p-4 sm:p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div class="space-y-1">
@@ -498,28 +509,47 @@
     <section id="view-practice" class="max-w-3xl lg:max-w-4xl mx-auto space-y-3">
       <!-- Thanh điều khiển chế độ học (Cuộn ngang gọn trên điện thoại, dàn đều trên máy tính) -->
       <div id="practiceControlBar" class="bg-white rounded-2xl border border-slate-200 p-2.5 sm:p-3 space-y-2 shadow-2xs">
-        <div class="flex items-center justify-between gap-2">
-          <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs font-bold py-0.5 flex-1">
-            <button onclick="setPracticeFilter('srs_due')" id="pFilter-srs_due"
-              class="px-3 py-1.5 rounded-xl bg-indigo-600 text-white whitespace-nowrap shrink-0 transition">
-              🧠 Đến hạn (<span id="cntFilterDue">0</span>)
+        <div class="flex items-center gap-2">
+          <!-- Menu chọn chế độ ôn -->
+          <div class="relative min-w-0">
+            <button onclick="toggleMenu('practiceModeMenu', event)" id="practiceModeBtn"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold whitespace-nowrap">
+              <span id="practiceModeLabel">🧠 Đến hạn</span>
+              <span class="opacity-80">▾</span>
             </button>
-            <button onclick="setPracticeFilter('interleaved')" id="pFilter-interleaved"
-              class="px-3 py-1.5 rounded-xl bg-slate-100 text-purple-800 hover:bg-purple-50 whitespace-nowrap shrink-0 transition">
-              🔀 Trộn liên môn
+            <div id="practiceModeMenu" class="app-menu hidden absolute left-0 top-full mt-1.5 w-56 bg-white rounded-2xl border border-slate-200 shadow-lg p-1.5 z-40 text-xs font-bold">
+              <button onclick="setPracticeFilter('srs_due')" id="pFilter-srs_due" data-label="🧠 Đến hạn">🧠 Đến hạn <span class="ml-auto px-1.5 rounded-full bg-amber-100 text-amber-800" id="cntFilterDue">0</span></button>
+              <button onclick="setPracticeFilter('interleaved')" id="pFilter-interleaved" data-label="🔀 Trộn liên môn">🔀 Trộn liên môn</button>
+              <button onclick="setPracticeFilter('error_bank')" id="pFilter-error_bank" data-label="❌ Câu sai">❌ Câu sai <span class="ml-auto px-1.5 rounded-full bg-rose-100 text-rose-700" id="cntFilterWrong">0</span></button>
+              <button onclick="setPracticeFilter('sequential')" id="pFilter-sequential" data-label="📋 Tuần tự">📋 Tuần tự</button>
+              <button onclick="setPracticeFilter('starred')" id="pFilter-starred" data-label="⭐ Đánh dấu">⭐ Đánh dấu</button>
+            </div>
+          </div>
+
+          <button onclick="openInterleavePickerModal()" id="btnChooseInterleaveSubjects"
+            class="hidden px-2.5 py-1.5 rounded-xl text-xs font-bold bg-purple-600 text-white hover:bg-purple-500 whitespace-nowrap shrink-0 transition">
+            📚 Chọn môn (<span id="interleaveSubCount">Tất cả</span>)
+          </button>
+
+          <div class="flex-1"></div>
+
+          <!-- Menu tuỳ chọn học -->
+          <div class="relative shrink-0">
+            <button onclick="toggleMenu('practiceOptsMenu', event)" id="practiceOptsBtn" title="Tuỳ chọn học"
+              class="relative px-2.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200">
+              ⚙️ Tuỳ chọn
+              <span id="practiceOptsDot" class="hidden absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-purple-500 border-2 border-white"></span>
             </button>
-            <button onclick="setPracticeFilter('error_bank')" id="pFilter-error_bank"
-              class="px-3 py-1.5 rounded-xl bg-slate-100 text-rose-700 hover:bg-rose-50 whitespace-nowrap shrink-0 transition">
-              ❌ Câu sai (<span id="cntFilterWrong">0</span>)
-            </button>
-            <button onclick="setPracticeFilter('sequential')" id="pFilter-sequential"
-              class="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 whitespace-nowrap shrink-0 transition">
-              📋 Tuần tự
-            </button>
-            <button onclick="setPracticeFilter('starred')" id="pFilter-starred"
-              class="px-3 py-1.5 rounded-xl bg-slate-100 text-amber-700 hover:bg-amber-50 whitespace-nowrap shrink-0 transition">
-              ⭐ Đánh dấu
-            </button>
+            <div id="practiceOptsMenu" class="app-menu app-menu-opts hidden absolute right-0 top-full mt-1.5 w-56 bg-white rounded-2xl border border-slate-200 shadow-lg p-2 z-40 space-y-1.5 text-xs">
+              <button onclick="toggleStudyDepthMode()" id="btnStudyDepth" title="Chuyển đổi giữa Học nhanh và Học chuyên sâu">🔬 Chuyên sâu</button>
+              <button onclick="toggleKahootPracticeMode()" id="btnKahootMode">⚡ Kahoot: TẮT</button>
+              <button onclick="toggleShufflePracticeOptions()" id="btnShufflePractice">🔀 Trộn ABCD: TẮT</button>
+              <div class="hidden sm:block pt-2 mt-1 border-t border-slate-200 text-[11px] text-slate-500 leading-relaxed">
+                ⌨️ <b>A–D</b> hoặc <b>1–4</b>: chọn đáp án<br>
+                <b>Enter / →</b>: câu tiếp · <b>←</b>: câu trước<br>
+                <b>Esc</b>: đóng hộp thoại / thoát Tập trung
+              </div>
+            </div>
           </div>
 
           <button onclick="openQuestionJumpModal()" title="Bấm để nhảy nhanh tới câu hỏi bất kỳ"
@@ -528,33 +558,7 @@
           </button>
         </div>
 
-        <!-- Thanh tùy chọn phương pháp học -->
-        <div class="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-100 text-[11px] sm:text-xs overflow-x-auto no-scrollbar">
-          <div class="flex items-center gap-1.5 shrink-0">
-            <button onclick="toggleStudyDepthMode()" id="btnStudyDepth"
-              title="Chuyển đổi giữa Học nhanh và Học chuyên sâu"
-              class="px-2.5 py-1 rounded-xl font-bold border border-emerald-200 bg-emerald-50 text-emerald-800 whitespace-nowrap transition">
-              🔬 Chuyên sâu
-            </button>
-
-            <button onclick="toggleKahootPracticeMode()" id="btnKahootMode"
-              class="px-2.5 py-1 rounded-xl font-bold border border-purple-200 bg-purple-50 text-purple-800 hover:bg-purple-100 whitespace-nowrap transition">
-              ⚡ Kahoot: TẮT
-            </button>
-
-            <button onclick="toggleShufflePracticeOptions()" id="btnShufflePractice"
-              class="px-2.5 py-1 rounded-xl font-bold border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 whitespace-nowrap transition">
-              🔀 Trộn ABCD: TẮT
-            </button>
-          </div>
-
-          <button onclick="openInterleavePickerModal()" id="btnChooseInterleaveSubjects"
-            class="hidden px-2.5 py-1 rounded-xl font-bold bg-purple-600 text-white hover:bg-purple-500 whitespace-nowrap shrink-0 transition">
-            📚 Chọn môn (<span id="interleaveSubCount">Tất cả</span>)
-          </button>
-        </div>
-
-        <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+        <div class="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
           <div id="practiceSessionProgressBar" class="h-full bg-indigo-600 transition-all duration-300" style="width: 0%;"></div>
         </div>
       </div>
@@ -1587,6 +1591,8 @@
     const LEGACY_APP_KEY = 'quizmaster_clean_study_v1';
     const EXAM_DRAFT_KEY = 'quizmaster_exam_draft_v1';
     const EXAM_HISTORY_KEY = 'quizmaster_exam_history_v1';
+    const LAST_BACKUP_KEY = 'quizmaster_last_backup_v1';
+    const BACKUP_SNOOZE_KEY = 'quizmaster_backup_snooze_v1';
 
     const DEFAULT_SUBJECTS = [
       {
@@ -2119,7 +2125,7 @@
           ? 'px-2 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-2xs transition'
           : 'px-2 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition';
       }
-      showToast(focusModeEnabled ? '🎯 Đã bật chế độ Tập trung (bấm lại 🎯 để thoát)' : 'Đã thoát chế độ Tập trung');
+      showToast(focusModeEnabled ? '🎯 Đã bật chế độ Tập trung (bấm 🎯 hoặc Esc để thoát)' : 'Đã thoát chế độ Tập trung');
     }
 
     function openQuestionJumpModal() {
@@ -2449,26 +2455,54 @@
       return ['A', 'B', 'C', 'D'].includes(q.answer) && q.options && q.options[q.answer];
     }
 
+    function toggleMenu(id, ev) {
+      if (ev) ev.stopPropagation();
+      document.querySelectorAll('.app-menu').forEach(m => { if (m.id !== id) m.classList.add('hidden'); });
+      const m = document.getElementById(id);
+      if (m) m.classList.toggle('hidden');
+    }
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.app-menu') ) document.querySelectorAll('.app-menu').forEach(m => m.classList.add('hidden'));
+    });
+
     function renderSubjectTabs() {
       const container = document.getElementById('subjectTabList');
       if (!container) return;
       container.innerHTML = '';
-      bankData.subjects.forEach(sub => {
-        const active = sub.id === studyLogsAndSettings.activeSubjectId;
-        const btn = document.createElement('button');
-        btn.className = active
-          ? 'px-3 py-1 rounded-xl bg-indigo-600 text-white text-xs font-bold shadow-2xs whitespace-nowrap shrink-0 transition'
-          : 'px-3 py-1 rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-100 text-xs font-semibold whitespace-nowrap shrink-0 transition';
-        btn.textContent = `${sub.name} (${sub.questions.length})`;
-        btn.onclick = () => {
+      const subs = bankData.subjects;
+      const cur = subs.find(x => x.id === studyLogsAndSettings.activeSubjectId) || subs[0];
+      if (!cur) return;
+
+      const btn = document.createElement('button');
+      btn.className = 'flex items-center gap-2 max-w-full px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-300 text-xs font-bold text-slate-800 transition';
+      btn.innerHTML = '<span>📚</span><span class="truncate"></span><span class="text-slate-400 shrink-0">(' + cur.questions.length + ')</span><span class="text-slate-400 shrink-0">▾</span>';
+      btn.querySelector('.truncate').textContent = cur.name;
+      btn.onclick = ev => toggleMenu('subjectMenu', ev);
+      container.appendChild(btn);
+
+      const menu = document.createElement('div');
+      menu.id = 'subjectMenu';
+      menu.className = 'app-menu hidden absolute left-0 top-full mt-1.5 w-72 max-w-[85vw] max-h-72 overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-lg p-1.5 z-50 text-xs font-semibold';
+      subs.forEach(sub => {
+        const it = document.createElement('button');
+        if (sub.id === cur.id) it.classList.add('is-active');
+        const nm = document.createElement('span');
+        nm.className = 'flex-1';
+        nm.textContent = sub.name;
+        const ct = document.createElement('span');
+        ct.className = 'text-slate-400';
+        ct.textContent = sub.questions.length;
+        it.append(nm, ct);
+        it.onclick = () => {
           studyLogsAndSettings.activeSubjectId = sub.id;
           saveAllStores();
           renderSubjectTabs();
           updateGlobalStats();
           refreshActiveView();
         };
-        container.appendChild(btn);
+        menu.appendChild(it);
       });
+      container.appendChild(menu);
     }
 
     function switchMainView(viewName) {
@@ -2497,7 +2531,7 @@
         }
       });
 
-      if (viewName === 'dashboard') renderDashboardView();
+      if (viewName === 'dashboard') { renderDashboardView(); updateBackupReminder(); }
       else if (viewName === 'practice') initPracticeView();
       else if (viewName === 'theory') initTheoryView();
       else if (viewName === 'flashcard') initFlashcardView();
@@ -2547,11 +2581,14 @@
       ['srs_due', 'interleaved', 'error_bank', 'sequential', 'starred'].forEach(k => {
         const el = document.getElementById(`pFilter-${k}`);
         if (el) {
-          el.className = k === flt
-            ? 'px-3 py-1.5 rounded-xl bg-indigo-600 text-white whitespace-nowrap shrink-0 transition'
-            : 'px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 whitespace-nowrap shrink-0 transition';
+          el.classList.toggle('is-active', k === flt);
+          if (k === flt) {
+            const lb = document.getElementById('practiceModeLabel');
+            if (lb) lb.textContent = el.dataset.label;
+          }
         }
       });
+      document.querySelectorAll('.app-menu').forEach(m => m.classList.add('hidden'));
       const chooseBtn = document.getElementById('btnChooseInterleaveSubjects');
       if (chooseBtn) chooseBtn.classList.toggle('hidden', flt !== 'interleaved');
       initPracticeView();
@@ -2591,31 +2628,32 @@
 
     function updatePracticeControlButtons() {
       const s = studyLogsAndSettings.settings;
+      const base = 'px-3 py-2 rounded-xl font-bold border whitespace-nowrap transition ';
+      const on = 'border-indigo-300 bg-indigo-50 text-indigo-800';
+      const off = 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100';
+
       const depthBtn = document.getElementById('btnStudyDepth');
       if (depthBtn) {
         depthBtn.textContent = s.studyDepth === 'deep' ? '🔬 Chuyên sâu' : '⚡ Học nhanh';
-        depthBtn.className = s.studyDepth === 'deep'
-          ? 'px-2.5 py-1 rounded-xl font-bold border border-emerald-200 bg-emerald-50 text-emerald-800 whitespace-nowrap transition'
-          : 'px-2.5 py-1 rounded-xl font-bold border border-amber-200 bg-amber-50 text-amber-800 whitespace-nowrap transition';
+        depthBtn.className = base + (s.studyDepth === 'deep' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800');
       }
 
       const kahootBtn = document.getElementById('btnKahootMode');
       const hud = document.getElementById('kahootHudBar');
       if (kahootBtn) {
         kahootBtn.textContent = `⚡ Kahoot: ${s.kahootMode ? 'BẬT' : 'TẮT'}`;
-        kahootBtn.className = s.kahootMode
-          ? 'px-2.5 py-1 rounded-xl font-bold bg-purple-600 text-white shadow-2xs whitespace-nowrap transition'
-          : 'px-2.5 py-1 rounded-xl font-bold border border-purple-200 bg-purple-50 text-purple-800 hover:bg-purple-100 whitespace-nowrap transition';
+        kahootBtn.className = base + (s.kahootMode ? 'border-purple-600 bg-purple-600 text-white' : off);
       }
       if (hud) hud.classList.toggle('hidden', !s.kahootMode);
 
       const shufBtn = document.getElementById('btnShufflePractice');
       if (shufBtn) {
         shufBtn.textContent = `🔀 Trộn ABCD: ${s.shuffleOptions ? 'BẬT' : 'TẮT'}`;
-        shufBtn.className = s.shuffleOptions
-          ? 'px-2.5 py-1 rounded-xl font-bold bg-indigo-50 text-indigo-700 border border-indigo-300 whitespace-nowrap transition'
-          : 'px-2.5 py-1 rounded-xl font-bold border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 whitespace-nowrap transition';
+        shufBtn.className = base + (s.shuffleOptions ? on : off);
       }
+
+      const dot = document.getElementById('practiceOptsDot');
+      if (dot) dot.classList.toggle('hidden', !(s.kahootMode || s.shuffleOptions));
 
       const intCountEl = document.getElementById('interleaveSubCount');
       if (intCountEl) {
@@ -4797,7 +4835,39 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
         <div>📚 Ngân hàng: <b>${bankData.subjects.length} môn (${totalQ} câu)</b></div>
         <div>🧠 Tiến độ SM-2: <b>${srsCount} bản ghi</b></div>
         <div>📜 Lịch sử thi: <b>${histCount} bài thi</b></div>
+        <div class="col-span-2 sm:col-span-3">🕒 Sao lưu gần nhất: <b>${backupAgeText()}</b></div>
       `;
+    }
+
+    function getLastBackupTs() {
+      try { return parseInt(localStorage.getItem(LAST_BACKUP_KEY) || '0', 10) || 0; } catch (e) { return 0; }
+    }
+    function backupAgeText() {
+      const ts = getLastBackupTs();
+      if (!ts) return 'chưa từng sao lưu';
+      const days = Math.floor((Date.now() - ts) / 86400000);
+      const when = new Date(ts).toLocaleDateString('vi-VN');
+      return days <= 0 ? `hôm nay (${when})` : `${days} ngày trước (${when})`;
+    }
+    function backupIsDue() {
+      if (!Object.keys(srsProgressMap || {}).length) return false; // chưa có tiến độ thì chưa cần
+      let snooze = 0;
+      try { snooze = parseInt(localStorage.getItem(BACKUP_SNOOZE_KEY) || '0', 10) || 0; } catch (e) {}
+      if (Date.now() < snooze) return false;
+      const ts = getLastBackupTs();
+      return !ts || (Date.now() - ts) > 7 * 86400000;
+    }
+    function snoozeBackupReminder() {
+      try { localStorage.setItem(BACKUP_SNOOZE_KEY, String(Date.now() + 3 * 86400000)); } catch (e) {}
+      updateBackupReminder();
+    }
+    function updateBackupReminder() {
+      const box = document.getElementById('backupReminder');
+      if (!box) return;
+      const due = backupIsDue();
+      box.classList.toggle('hidden', !due);
+      const t = document.getElementById('backupReminderText');
+      if (t && due) t.textContent = 'Dữ liệu chỉ lưu trong trình duyệt này — sao lưu lần cuối: ' + backupAgeText() + '. Xóa cache hoặc đổi máy là mất tiến độ ôn.';
     }
 
     function exportAllDataJSON() {
@@ -4813,10 +4883,14 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `QuizMaster_Pro_Backup_${getTodayDateKey(0)}.json`;
+      const _n = new Date(), _p = v => String(v).padStart(2, '0');
+      a.download = `QuizMaster_Pro_Backup_${getTodayDateKey(0)}_${_p(_n.getHours())}${_p(_n.getMinutes())}.json`;
+      try { localStorage.setItem(LAST_BACKUP_KEY, String(Date.now())); localStorage.removeItem(BACKUP_SNOOZE_KEY); } catch (err) {}
       a.click();
       URL.revokeObjectURL(url);
       showToast('💾 Đã xuất tệp sao lưu JSON đầy đủ!');
+      updateBackupReminder();
+      updateStorageSummaryUI();
     }
 
     function handleImportJSONSelection(event) {
@@ -4871,6 +4945,9 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
                       bankData.subjects.push(targetSub);
                     }
                     (incSub.questions || []).forEach(q => {
+                      if (existingQIds.has(q.id) && incomingSrs[q.id] && !srsProgressMap[q.id]) {
+                        srsProgressMap[q.id] = incomingSrs[q.id];
+                      }
                       if (!existingQIds.has(q.id)) {
                         targetSub.questions.push(q);
                         existingQIds.add(q.id);
@@ -4882,6 +4959,12 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
                     });
                   });
 
+                  if (incomingHistory.length) {
+                    const cur = loadExamHistoryList();
+                    const seen = new Set(cur.map(x => JSON.stringify(x)));
+                    incomingHistory.forEach(x => { if (!seen.has(JSON.stringify(x))) cur.push(x); });
+                    try { localStorage.setItem(EXAM_HISTORY_KEY, JSON.stringify(cur.slice(0, 50))); } catch (err) {}
+                  }
                   saveAllStores();
                   renderSubjectTabs();
                   updateGlobalStats();
@@ -5407,17 +5490,39 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
     });
 
     window.addEventListener('keydown', e => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      const tag = e.target && e.target.tagName;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || (e.target && e.target.isContentEditable)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return; // không chặn Ctrl+C, Ctrl+A, F5...
+
+      const openOverlays = [...document.querySelectorAll('.fixed')].filter(el => /Modal$|Overlay$/.test(el.id) && !el.classList.contains('hidden'));
+
+      if (e.key === 'Escape') {
+        if (openOverlays.length) {
+          const top = openOverlays[openOverlays.length - 1];
+          if (top.id === 'customDialogOverlay') closeCustomDialog(); else top.classList.add('hidden');
+          return;
+        }
+        const openMenus = [...document.querySelectorAll('.app-menu')].filter(m => !m.classList.contains('hidden'));
+        if (openMenus.length) { openMenus.forEach(m => m.classList.add('hidden')); return; }
+        if (typeof focusModeEnabled !== 'undefined' && focusModeEnabled) toggleFocusMode();
+        return;
+      }
+
+      if (openOverlays.length || e.repeat) return; // đang mở hộp thoại: không chọn đáp án phía sau
 
       if (!document.getElementById('view-practice').classList.contains('hidden')) {
+        const isNext = e.code === 'Space' || e.code === 'Enter' || e.key === 'ArrowRight';
         const currQ = practiceDeck[practiceIndex];
         if (currQ && isTheoryQuestion(currQ)) {
           if (!practiceTheoryRevealed && (e.code === 'Space' || e.code === 'Enter')) {
             e.preventDefault();
             revealTheoryAnswer();
-          } else if (practiceAnswered && (e.code === 'Space' || e.code === 'Enter')) {
+          } else if (practiceAnswered && isNext) {
             e.preventDefault();
             movePracticeQuestion(1);
+          } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            movePracticeQuestion(-1);
           }
           return;
         }
@@ -5427,10 +5532,16 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
           const map = { '1': 'A', '2': 'B', '3': 'C', '4': 'D', 'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D' };
           if (map[key] && document.getElementById(`pOpt_${map[key]}`)) {
             selectPracticeOption(map[key], false);
+          } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            movePracticeQuestion(-1);
           }
-        } else if (e.code === 'Space' || e.code === 'Enter') {
+        } else if (isNext) {
           e.preventDefault();
           movePracticeQuestion(1);
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          movePracticeQuestion(-1);
         }
       } else if (!document.getElementById('view-flashcard').classList.contains('hidden')) {
         if (e.code === 'Space') { e.preventDefault(); flipFlashcard(); }
@@ -5445,6 +5556,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
 
     window.onload = function() {
       loadAllStores();
+      setTimeout(() => { if (backupIsDue()) { showToast('💾 Đã lâu bạn chưa sao lưu — vào Tổng quan hoặc Ngân hàng đề ➜ Sao lưu.'); try { localStorage.setItem(BACKUP_SNOOZE_KEY, String(Date.now() + 86400000)); } catch (e) {} } }, 2500);
       syncBgmState();
       startStudyTimeTracker();
       renderSubjectTabs();
