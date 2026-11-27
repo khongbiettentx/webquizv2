@@ -5052,6 +5052,62 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
     }
 
     /* CHƠI CÙNG BẠN BÈ (PeerJS: chủ phòng giữ luật chơi, không cần server riêng) */
+    const MP_ICE_SERVERS_KEY = 'quizmaster_mp_ice_v1';
+    const MP_DEFAULT_ICE = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turns:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
+    ];
+    function getMpPeerOptions() {
+      let extra = [];
+      try {
+        const raw = localStorage.getItem(MP_ICE_SERVERS_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) extra = parsed;
+        }
+      } catch (e) {}
+      return { config: { iceServers: MP_DEFAULT_ICE.concat(extra) } };
+    }
+    function mpConfigureTurn() {
+      let cur = '';
+      try { cur = localStorage.getItem(MP_ICE_SERVERS_KEY) || ''; } catch (e) {}
+      openCustomInputDialog({
+        title: '🌐 Cấu hình TURN server xuyên mạng',
+        message: 'Dán mảng JSON iceServers (từ Metered/Twilio/Xirsys...) hoặc để trống để dùng STUN mặc định:',
+        defaultValue: cur,
+        confirmText: 'Lưu TURN',
+        onConfirm: (val) => {
+          const t = (val || '').trim();
+          try {
+            if (!t) localStorage.removeItem(MP_ICE_SERVERS_KEY);
+            else {
+              JSON.parse(t);
+              localStorage.setItem(MP_ICE_SERVERS_KEY, t);
+            }
+            showToast('✅ Đã lưu cấu hình kết nối mạng cho phòng chơi!');
+          } catch (err) {
+            showToast('❌ Chuỗi JSON iceServers không hợp lệ.');
+          }
+        }
+      });
+    }
+
     const MP_COLORS = ['#e21b3c', '#1368ce', '#d89e00', '#26890c'];
     let mp = null;
     const mpEl = id => document.getElementById(id);
@@ -5103,7 +5159,10 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
           <div class="${card}"><h3 class="font-extrabold text-slate-900">🔑 Vào phòng của bạn bè</h3>
             <input id="mpPin" inputmode="numeric" maxlength="5" placeholder="Nhập PIN 5 số" class="${inp}">
             <button onclick="mpJoin()" class="${btn}bg-indigo-600 hover:bg-indigo-500">Vào phòng</button></div>
-          <p class="text-[11px] text-slate-500 leading-relaxed">Cần có mạng. Ai cũng mở cùng link web này. Chủ phòng phải giữ màn hình mở trong suốt ván chơi.</p>`;
+          <div class="flex items-center justify-between gap-2 text-[11px] text-slate-500 leading-relaxed">
+            <span>Cần có mạng. Ai cũng mở cùng link web này. Chủ phòng giữ màn hình mở trong suốt ván chơi.</span>
+            <button type="button" onclick="mpConfigureTurn()" class="shrink-0 underline font-bold text-indigo-600 hover:text-indigo-800">TURN</button>
+          </div>`;
       } else if (mp.phase === 'connecting') {
         b.innerHTML = `<div class="${card} text-center font-bold text-slate-600">⏳ Đang kết nối…</div>`;
       } else if (mp.phase === 'lobby') {
@@ -5201,7 +5260,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
       if (typeof Peer === 'undefined') return mpErr('Cần có mạng để chơi cùng bạn bè.');
       const my = mp = { phase: 'connecting', role: 'player', names: [] };
       mpRender();
-      const peer = new Peer(); my.peer = peer;
+      const peer = new Peer(getMpPeerOptions()); my.peer = peer;
       const to = setTimeout(() => { if (mp === my) mpErr('Không tìm thấy phòng hoặc kết nối quá chậm.'); }, 12000);
       peer.on('error', e => { clearTimeout(to); if (mp === my) mpErr(e.type === 'peer-unavailable' ? 'Không có phòng với PIN này.' : 'Lỗi kết nối: ' + e.type); });
       peer.on('open', () => {
@@ -5224,7 +5283,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
       let tries = 0;
       const open = () => {
         my.pin = String(Math.floor(10000 + Math.random() * 90000));
-        const peer = new Peer('qm-' + my.pin); my.peer = peer;
+        const peer = new Peer('qm-' + my.pin, getMpPeerOptions()); my.peer = peer;
         peer.on('error', e => {
           if (mp !== my) return;
           if (e.type === 'unavailable-id' && tries++ < 4) { try { peer.destroy(); } catch (x) {} open(); return; } // PIN trùng → đổi PIN khác
