@@ -1567,14 +1567,16 @@
   </div>
 
   <!-- Modal 2: Cài đặt Phiên học, Pomodoro, Âm thanh & Hiệu ứng -->
-  <div id="studySettingsModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-2xs z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-5 sm:p-6 shadow-xl space-y-4 text-xs sm:text-sm">
-      <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
-        <h3 class="text-base font-extrabold text-slate-900">⚙️ Cài Đặt Trải Nghiệm Học Tập</h3>
-        <button onclick="closeStudySettingsModal()" class="text-slate-400 hover:text-slate-700 font-bold">✕ Đóng</button>
+  <div id="studySettingsModal" onclick="if(event.target===this)closeStudySettingsModal()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-2xs z-50 flex items-center justify-center p-2 sm:p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 max-w-lg w-full shadow-xl text-xs sm:text-sm flex flex-col overflow-hidden" style="max-height: calc(100dvh - 16px); max-height: min(92dvh, 100dvh - 16px);">
+      <!-- Đầu hộp: luôn hiện, có nút đóng -->
+      <div class="shrink-0 flex items-center justify-between gap-2 border-b border-slate-100 px-4 sm:px-6 py-3 bg-white">
+        <h3 class="text-sm sm:text-base font-extrabold text-slate-900">⚙️ Cài Đặt Học Tập</h3>
+        <button onclick="closeStudySettingsModal()" class="shrink-0 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold">✕ Đóng</button>
       </div>
 
-      <div class="space-y-3">
+      <!-- Thân hộp: cuộn lên xuống -->
+      <div id="studySettingsScroll" class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-4 space-y-3" style="-webkit-overflow-scrolling: touch;">
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block font-bold text-slate-700 mb-1">Số câu mỗi lượt ôn tập (0 = tất cả):</label>
@@ -1594,12 +1596,12 @@
           </select>
         </div>
 
-        <div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
           <div>
             <div class="font-bold text-slate-800">Giao diện hiển thị (Nền Sáng / Tối / Giấy dịu mắt)</div>
             <div class="text-xs text-slate-500">Bảo vệ mắt khi học ban đêm hoặc tự động theo thiết bị</div>
           </div>
-          <select id="setColorTheme" class="px-3 py-1.5 rounded-xl border border-slate-300 font-bold bg-white">
+          <select id="setColorTheme" class="px-3 py-1.5 rounded-xl border border-slate-300 font-bold bg-white w-full sm:w-auto">
             <option value="light">☀️ Trắng sáng (Mặc định)</option>
             <option value="rose">🌸 Hồng phấn (Rose Pastel)</option>
             <option value="sakura">🌷 Hồng hoa anh đào (Sakura)</option>
@@ -1690,7 +1692,8 @@
         </div>
       </div>
 
-      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+      <!-- Chân hộp: luôn hiện nút Hủy / Lưu -->
+      <div class="shrink-0 flex justify-end gap-2 px-4 sm:px-6 py-3 border-t border-slate-100 bg-white" style="padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));">
         <button onclick="closeStudySettingsModal()" class="px-4 py-2 rounded-xl bg-slate-100 font-bold text-slate-700">Hủy</button>
         <button onclick="saveStudySettingsModal()" class="px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500">💾 Lưu cài đặt</button>
       </div>
