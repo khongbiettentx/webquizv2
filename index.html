@@ -6027,6 +6027,12 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
     }
 
     function normQ(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+    // Chữ ký đầy đủ: cùng nội dung NHƯNG khác phương án/đáp án thì là 2 câu khác nhau, không được coi là trùng
+    function qSig(q) {
+      const o = (q && q.options) || {};
+      const a = q && q.answer;
+      return normQ(q && q.question) + '||' + ['A', 'B', 'C', 'D'].map(k => normQ(o[k])).join('|') + '||' + normQ(a && o[a] ? o[a] : (q && q.theoryAnswer) || '');
+    }
 
     async function syncQuestionsFromUrl(silent) {
       const inp = document.getElementById('syncUrlInput');
@@ -6042,6 +6048,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
         const subs = Array.isArray(data) ? data : (data.subjects || (data.bankData && data.bankData.subjects));
         if (!Array.isArray(subs)) throw new Error('Sai định dạng (cần có "subjects")');
         let added = 0, updated = 0, newSubs = 0, relinked = 0;
+        const syncExtraQs = [];
         const okId = v => typeof v === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(v);
         const genId = (pre, n) => pre + Date.now() + '_' + Math.random().toString(36).slice(2, 2 + n);
         const usedQ = new Set(), usedS = new Set(bankData.subjects.map(x => x.id));
@@ -6081,6 +6088,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
           const claimed = new Set();
           const pairs = [];      // [câu cục bộ, câu từ de.json]
           const pending = [];    // câu từ de.json chưa khớp theo id
+          const addedObjs = new Set();
           const byId = new Map(sub.questions.map(q => [q.id, q]));
           // Lượt 1: khớp theo id (cách chính, ổn định khi sửa chữ trong câu hỏi)
           inSub.questions.forEach(iq => {
@@ -6092,7 +6100,8 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
           const byText = new Map();
           sub.questions.forEach(q => { if (claimed.has(q)) return; const k = normQ(q.question); if (!byText.has(k)) byText.set(k, []); byText.get(k).push(q); });
           pending.forEach(iq => {
-            const cand = (byText.get(normQ(iq.question)) || []).find(q => !claimed.has(q));
+            const cands = byText.get(normQ(iq.question)) || [];
+            const cand = cands.find(q => !claimed.has(q) && qSig(q) === qSig(iq)) || cands.find(q => !claimed.has(q));
             if (cand) {
               claimed.add(cand); pairs.push([cand, iq]);
               if (okId(iq.id) && iq.id !== cand.id && !usedQ.has(iq.id)) {
@@ -6105,16 +6114,18 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
               const nid = (okId(iq.id) && !usedQ.has(iq.id)) ? iq.id : genId('q_', 5);
               const nq = Object.assign({}, iq, { id: nid });
               delete nq.starred; delete nq.note;
-              usedQ.add(nid); sub.questions.push(nq); added++;
+              usedQ.add(nid); sub.questions.push(nq); addedObjs.add(nq); added++;
             }
           });
+          // Câu có ở máy nhưng không còn trong de.json (câu thừa / bản cũ đã sửa)
+          const localOnly = sub.questions.filter(q => !claimed.has(q) && !addedObjs.has(q));
           // Xóa các câu trùng lặp cũ trong cùng môn (giữ lại câu có ghi chú/tiến độ hoặc câu mới nhất)
           let removedDupQ = 0;
           const keepMap = new Map();
           const orderedQs = sub.questions.slice();
           orderedQs.forEach(qItem => {
-            const tKey = normQ(qItem.question);
-            if (!tKey) return;
+            const tKey = qSig(qItem);
+            if (!normQ(qItem.question)) return;
             if (!keepMap.has(tKey)) {
               keepMap.set(tKey, qItem);
             } else {
@@ -6137,6 +6148,8 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
             added = Math.max(0, added - removedDupQ);
           }
 
+          localOnly.forEach(q => { if (sub.questions.includes(q)) syncExtraQs.push({ subId: sub.id, subName: sub.name, id: q.id, text: String(q.question || '') }); });
+
           // Cập nhật các câu đã khớp (giữ nguyên starred, note và tiến độ ôn)
           pairs.forEach(([ex, iq]) => {
             let ch = false;
@@ -6157,10 +6170,43 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
           ? `✅ Đồng bộ: +${added} câu mới, ${updated} câu được cập nhật${newSubs ? `, ${newSubs} môn mới` : ''}.`
           : '✅ Bạn đang có bộ đề mới nhất.';
         say(msg);
+        window.__syncExtraQs = syncExtraQs;
+        if (box && syncExtraQs.length) {
+          const wrap = document.createElement('div');
+          wrap.className = 'mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 space-y-1.5';
+          const list = syncExtraQs.slice(0, 8).map(x => '• ' + x.text.slice(0, 80)).join('\n');
+          const t = document.createElement('div');
+          t.className = 'font-bold';
+          t.textContent = `⚠️ Máy bạn có ${syncExtraQs.length} câu KHÔNG nằm trong de.json (thường là bản cũ của câu đã sửa nên bị thừa).`;
+          const pre = document.createElement('div');
+          pre.className = 'whitespace-pre-wrap text-[11px] opacity-80';
+          pre.textContent = list + (syncExtraQs.length > 8 ? `\n… và ${syncExtraQs.length - 8} câu nữa` : '');
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'px-3 py-1.5 rounded-lg bg-amber-500 text-white font-bold';
+          btn.textContent = `🧹 Xóa ${syncExtraQs.length} câu thừa`;
+          btn.onclick = removeSyncExtraQuestions;
+          wrap.appendChild(t); wrap.appendChild(pre); wrap.appendChild(btn);
+          box.appendChild(wrap);
+        }
         if (!silent || added || updated) showToast(msg);
       } catch (err) {
         if (!silent) say('❌ Không đồng bộ được: ' + err.message + ' (kiểm tra link, mạng hoặc file de.json).');
       }
+    }
+
+    function removeSyncExtraQuestions() {
+      const ex = window.__syncExtraQs || [];
+      if (!ex.length) return;
+      if (!confirm(`Xóa ${ex.length} câu chỉ có ở máy bạn (không có trong de.json)?\nNếu đó là câu bạn tự thêm thì cũng sẽ bị xóa.`)) return;
+      const byId = new Set(ex.map(x => x.id));
+      bankData.subjects.forEach(s => { s.questions = s.questions.filter(q => !byId.has(q.id)); });
+      byId.forEach(id => { delete srsProgressMap[id]; });
+      window.__syncExtraQs = [];
+      saveAllStores(); renderSubjectTabs(); updateGlobalStats(); initBankView(); refreshActiveView();
+      const box = document.getElementById('syncResultBox');
+      if (box) { box.classList.remove('hidden'); box.textContent = `✅ Đã xóa ${ex.length} câu thừa — số câu giờ khớp với de.json.`; }
+      showToast(`🧹 Đã xóa ${ex.length} câu thừa`);
     }
 
     function exportQuestionsOnlyJSON() {
