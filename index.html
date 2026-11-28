@@ -615,11 +615,11 @@
           <div class="relative min-w-0">
             <button onclick="toggleMenu('practiceModeMenu', event)" id="practiceModeBtn"
               class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold whitespace-nowrap">
-              <span id="practiceModeLabel">🧠 Đến hạn</span>
+              <span id="practiceModeLabel">🧠 Học hết (chưa làm + sai)</span>
               <span class="opacity-80">▾</span>
             </button>
             <div id="practiceModeMenu" class="app-menu hidden absolute left-0 top-full mt-1.5 w-56 bg-white rounded-2xl border border-slate-200 shadow-lg p-1.5 z-40 text-xs font-bold">
-              <button onclick="setPracticeFilter('srs_due')" id="pFilter-srs_due" data-label="🧠 Đến hạn">🧠 Đến hạn <span class="ml-auto px-1.5 rounded-full bg-amber-100 text-amber-800" id="cntFilterDue">0</span></button>
+              <button onclick="setPracticeFilter('srs_due')" id="pFilter-srs_due" data-label="🧠 Học hết (chưa làm + sai)">🧠 Học hết (chưa làm + sai) <span class="ml-auto px-1.5 rounded-full bg-amber-100 text-amber-800" id="cntFilterDue">0</span></button>
               <button onclick="setPracticeFilter('interleaved')" id="pFilter-interleaved" data-label="🔀 Trộn liên môn">🔀 Trộn liên môn</button>
               <button onclick="setPracticeFilter('error_bank')" id="pFilter-error_bank" data-label="❌ Câu sai">❌ Câu sai <span class="ml-auto px-1.5 rounded-full bg-rose-100 text-rose-700" id="cntFilterWrong">0</span></button>
               <button onclick="setPracticeFilter('sequential')" id="pFilter-sequential" data-label="📋 Tuần tự">📋 Tuần tự</button>
@@ -643,6 +643,14 @@
               <span id="practiceOptsDot" class="hidden absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-purple-500 border-2 border-white"></span>
             </button>
             <div id="practiceOptsMenu" class="app-menu app-menu-opts hidden absolute right-0 top-full mt-1.5 w-56 bg-white rounded-2xl border border-slate-200 shadow-lg p-2 z-40 space-y-1.5 text-xs">
+              <div class="flex items-center gap-2 px-1 pb-1">
+                <label for="practiceLimitSel" class="font-bold text-slate-700 whitespace-nowrap">🔢 Số câu/lượt</label>
+                <select id="practiceLimitSel" onchange="onPracticeLimitChange(this.value)" class="flex-1 min-w-0 px-2 py-1 rounded-lg border border-slate-300 font-bold bg-white text-slate-800">
+                  <option value="10">10</option><option value="20">20</option><option value="30">30</option>
+                  <option value="50">50</option><option value="100">100</option>
+                  <option value="0">Tất cả</option><option value="custom">Tự nhập…</option>
+                </select>
+              </div>
               <button onclick="toggleStudyDepthMode()" id="btnStudyDepth" title="Chuyển đổi giữa Học nhanh và Học chuyên sâu">🔬 Chuyên sâu</button>
               <button onclick="toggleKahootPracticeMode()" id="btnKahootMode">⚡ Kahoot: TẮT</button>
               <button onclick="toggleShufflePracticeOptions()" id="btnShufflePractice">🔀 Trộn ABCD: TẮT</button>
@@ -1546,8 +1554,8 @@
       <div class="space-y-3">
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block font-bold text-slate-700 mb-1">Số câu mỗi lượt ôn tập:</label>
-            <input id="setSessionLimit" type="number" min="5" max="200" class="w-full px-3 py-2 rounded-xl border border-slate-300 font-bold">
+            <label class="block font-bold text-slate-700 mb-1">Số câu mỗi lượt ôn tập (0 = tất cả):</label>
+            <input id="setSessionLimit" type="number" min="0" max="5000" placeholder="0 = tất cả" class="w-full px-3 py-2 rounded-xl border border-slate-300 font-bold">
           </div>
           <div>
             <label class="block font-bold text-slate-700 mb-1">Thời gian Pomodoro (phút):</label>
@@ -2757,6 +2765,37 @@
       initPracticeView();
     }
 
+    function syncPracticeLimitSel() {
+      const sel = document.getElementById('practiceLimitSel');
+      if (!sel) return;
+      const v = studyLogsAndSettings.settings.sessionLimit;
+      const cur = (v === 0) ? 0 : (v || 20);
+      let opt = [...sel.options].find(o => o.value === String(cur));
+      if (!opt) {
+        opt = document.createElement('option');
+        opt.value = String(cur); opt.textContent = String(cur);
+        sel.insertBefore(opt, sel.querySelector('option[value="0"]'));
+      }
+      sel.value = String(cur);
+    }
+
+    function onPracticeLimitChange(val) {
+      const st = studyLogsAndSettings.settings;
+      if (val === 'custom') {
+        const raw = prompt('Nhập số câu mỗi lượt ôn (0 = tất cả):', String(st.sessionLimit === 0 ? 0 : (st.sessionLimit || 20)));
+        const n = parseInt(raw, 10);
+        if (raw === null || isNaN(n) || n < 0) { syncPracticeLimitSel(); return; }
+        st.sessionLimit = Math.min(n, 5000);
+      } else {
+        st.sessionLimit = parseInt(val, 10);
+      }
+      saveAllStores();
+      syncPracticeLimitSel();
+      document.querySelectorAll('.app-menu').forEach(m => m.classList.add('hidden'));
+      showToast(st.sessionLimit === 0 ? '🔢 Mỗi lượt: tất cả câu' : `🔢 Mỗi lượt: ${st.sessionLimit} câu`);
+      initPracticeView();
+    }
+
     function toggleStudyDepthMode() {
       const s = studyLogsAndSettings.settings;
       s.studyDepth = s.studyDepth === 'deep' ? 'quick' : 'deep';
@@ -2850,6 +2889,7 @@
     }
 
     function initPracticeView() {
+      syncPracticeLimitSel();
       stopKahootTimer();
       stopQuestionClock();
       updatePracticeControlButtons();
@@ -2893,7 +2933,7 @@
         }
       }
 
-      const limit = settings.sessionLimit || 20;
+      const limit = (settings.sessionLimit === 0) ? Infinity : (settings.sessionLimit || 20);
       if (practiceFilter !== 'sequential' && list.length > limit) list = list.slice(0, limit);
 
       practiceDeck = list;
@@ -2909,7 +2949,7 @@
         document.getElementById('practiceCounter').textContent = '0 / 0';
         document.getElementById('practiceSessionProgressBar').style.width = '100%';
         document.getElementById('practiceEmptyTitle').textContent =
-          practiceFilter === 'srs_due' ? '🎉 Bạn đã hoàn thành tất cả câu hỏi đến hạn hôm nay!' :
+          practiceFilter === 'srs_due' ? '🎉 Bạn đã học hết và làm đúng tất cả các câu!' :
           practiceFilter === 'error_bank' ? '👏 Không còn câu sai nào cần khắc phục!' :
           practiceFilter === 'starred' ? '⭐ Chưa có câu hỏi nào được đánh dấu' :
           'Môn học này chưa có câu hỏi trắc nghiệm nào';
@@ -3055,6 +3095,21 @@
       if (isCorrect) practiceSessionCorrect++;
 
       updateSM2Progress(q.id, isCorrect, isCorrect ? 'certain' : 'guess');
+      {
+        // Chế độ "học hết": đúng = xong hẳn; sai = còn nợ, phải làm lại cho đến khi đúng
+        const pp = getQProgress(q.id);
+        if (isCorrect) {
+          pp.intervalDays = Math.max(pp.intervalDays || 0, 365);
+          pp.srsLevel = 3;
+          pp.dueAt = Date.now() + 365 * 86400000;
+        } else {
+          pp.dueAt = 0;
+          if (practiceFilter === 'srs_due' || practiceFilter === 'error_bank') {
+            const later = practiceDeck.slice(practiceIndex + 1).some(x => x.id === q.id);
+            if (!later) practiceDeck.push(Object.assign({}, deckItem));
+          }
+        }
+      }
       recordStudyActivity(0, 1, isCorrect ? 1 : 0);
 
       let gainMsg = '';
@@ -3123,11 +3178,11 @@
       if (needReview) {
         p.intervalDays = 0;
         p.srsLevel = 1;
-        p.dueAt = now + 10 * 60 * 1000;
+        p.dueAt = 0;
         updateReviewStatusBadge(true);
         showToast('🔁 Đã đánh dấu: Cần ôn tập lại!');
       } else {
-        p.intervalDays = Math.max(3, p.intervalDays || 3);
+        p.intervalDays = Math.max(365, p.intervalDays || 365);
         p.srsLevel = 3;
         p.dueAt = now + p.intervalDays * 86400000;
         updateReviewStatusBadge(false);
@@ -3235,7 +3290,7 @@
         <div class="bg-white/10 rounded-2xl p-4 border border-white/20 text-center w-full max-w-sm">
           <div class="text-3xl mb-1">🏅</div>
           <div class="text-sm font-extrabold text-amber-300">Tiến độ đã được lưu vào hệ thống!</div>
-          <div class="text-xs text-purple-200 mt-1">Các câu đánh dấu "Cần ôn lại" sẽ tự động xuất hiện ưu tiên ở lượt sau.</div>
+          <div class="text-xs text-purple-200 mt-1">Bạn đã làm đúng hết các câu. Chỉ những câu sai mới xuất hiện lại khi ôn.</div>
         </div>
       `;
       if (studyLogsAndSettings.settings.kahootMode && kahootScore > 0) {
@@ -5761,7 +5816,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
 
     function openStudySettingsModal() {
       const s = studyLogsAndSettings.settings;
-      document.getElementById('setSessionLimit').value = s.sessionLimit || 20;
+      document.getElementById('setSessionLimit').value = (s.sessionLimit === 0) ? 0 : (s.sessionLimit || 20);
       document.getElementById('setPomodoroMins').value = s.pomodoroMinutes || 25;
       document.getElementById('setPriorityOrder').value = s.priorityOrder || 'smart_srs';
       document.getElementById('setColorTheme').value = s.theme || 'light';
@@ -5778,7 +5833,7 @@ Giải thích: TCP (Transmission Control Protocol) thiết lập kết nối 3 b
 
     function saveStudySettingsModal() {
       const s = studyLogsAndSettings.settings;
-      s.sessionLimit = Math.max(5, Math.min(200, parseInt(document.getElementById('setSessionLimit').value, 10) || 20));
+      { const n = parseInt(document.getElementById('setSessionLimit').value, 10); s.sessionLimit = isNaN(n) ? 20 : Math.max(0, Math.min(5000, n)); }
       s.pomodoroMinutes = Math.max(5, Math.min(120, parseInt(document.getElementById('setPomodoroMins').value, 10) || 25));
       s.priorityOrder = document.getElementById('setPriorityOrder').value;
       s.theme = document.getElementById('setColorTheme').value;
